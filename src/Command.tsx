@@ -101,7 +101,7 @@ export function CommandComponent({ session }: { session: WebSocketSession }) {
     xterm.clear();
     setIsError(false);
     try {
-      const result = await session.commands.run("echo 'OPS!' && exit 1");
+      const result = await session.commands.run("echo 'Oops!' && exit 1");
       if (typeof result === "string") {
         xterm.write(result);
         setIsError(false);
