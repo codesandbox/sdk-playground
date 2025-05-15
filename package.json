@@ -4,13 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 4000",
+    "dev": "vite",
     "build": "tsc -b && vite build",
     "server": "vite-node --config vite.server.config.ts server.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@codesandbox/sdk": "^1.0.0-rc.2",
     "@tailwindcss/vite": "^4.1.6",
     "@xterm/xterm": "^5.5.0",
     "express": "^5.1.0",
