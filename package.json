@@ -11,7 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@codesandbox/sdk": "^1.0.0-rc.2",
+    "@codesandbox/sdk": "^1.0.0-rc.3",
     "@tailwindcss/vite": "^4.1.6",
     "@xterm/xterm": "^5.5.0",
     "express": "^5.1.0",
