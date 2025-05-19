@@ -144,7 +144,8 @@ function App() {
           style={{
             marginTop: 0,
             marginBottom: 28,
-            fontWeight: 800,
+            fontFamily: "Aeonik",
+            fontWeight: 700,
             letterSpacing: 1,
             fontSize: 28,
           }}
@@ -161,6 +162,7 @@ function App() {
               fontSize: 14,
               color: "#0366d6",
               textDecoration: "underline",
+              fontFamily: "Aeonik",
               fontWeight: 500,
             }}
           >
@@ -172,20 +174,20 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-100 flex flex-col items-center justify-center p-4">
-      <h1 className="text-4xl font-bold mb-8 text-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-100 flex flex-col items-center justify-center p-4 font-aeonik">
+      <h1 className="text-4xl font-aeonik-bold mb-8 text-gray-800">
         Playground Examples
       </h1>
       {state.current === "IDLE" ? (
         <>
           <button
             onClick={handleCreateSandbox}
-            className={`mb-2 px-6 py-3 rounded-lg font-semibold text-white transition-all bg-blue-500 hover:bg-blue-600`}
+            className={`mb-2 px-6 py-3 rounded-lg font-aeonik-medium text-white transition-all bg-blue-500 hover:bg-blue-600`}
           >
             Create Sandbox
           </button>
           <div className="mb-8 text-center text-gray-700">
-            <p className="mb-1 font-medium max-w-2xl">
+            <p className="mb-1 font-aeonik-medium max-w-2xl">
               Click the button above to create a Sandbox and connect. This will
               fork a snapshot of a template already running a vite dev server
               and wake it up on a new VM for you.
@@ -194,7 +196,7 @@ function App() {
         </>
       ) : state.current === "CONNECTED" ? (
         <>
-          <div className="mb-8 text-center">Connected to Sandbox</div>
+          <div className="mb-8 text-center font-aeonik-medium">Connected to Sandbox</div>
           <ExampleWrapper title="Command Example" sourcePath="Command.tsx">
             <CommandComponent session={state.session} />
           </ExampleWrapper>
@@ -215,7 +217,7 @@ function App() {
           </ExampleWrapper>
         </>
       ) : (
-        <div className="mb-8 text-center">{state.progress}</div>
+        <div className="mb-8 text-center font-aeonik-medium">{state.progress}</div>
       )}
     </div>
   );
