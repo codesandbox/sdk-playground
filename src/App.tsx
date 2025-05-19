@@ -178,18 +178,58 @@ function App() {
       </h1>
       {state.current === "IDLE" ? (
         <>
+          <div className="mb-8 text-center text-gray-700">
+            <p className="mb-1 font-medium max-w-2xl">
+              Experience the functionality of the SDK with this interactive
+              playground.
+            </p>
+            <p className="mb-1 font-medium max-w-2xl">
+              To start, create a sample playground
+            </p>
+          </div>
           <button
             onClick={handleCreateSandbox}
             className={`mb-2 px-6 py-3 rounded-lg font-semibold text-white transition-all bg-blue-500 hover:bg-blue-600`}
           >
             Create Sandbox
           </button>
-          <div className="mb-8 text-center text-gray-700">
-            <p className="mb-1 font-medium max-w-2xl">
-              Click the button above to create a Sandbox and connect. This will
-              fork a snapshot of a template already running a vite dev server
-              and wake it up on a new VM for you.
-            </p>
+          <div className="mb-6 w-full max-w-2xl bg-slate-900 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 bg-slate-800">
+              <span className="text-slate-300 font-aeonik-medium text-sm">
+                Example Code
+              </span>
+              <button
+                onClick={() =>
+                  navigator.clipboard
+                    .writeText(`const handleCreateSandbox = async () => {
+  // Create a new sandbox
+  const res = await fetch("/api/sandboxes", { method: "POST" });
+  const initialSession = await res.json();
+  
+  // Store sandboxId for reconnection
+  localStorage.setItem("sandboxId", initialSession.id);
+  
+  // Connect to the sandbox
+  const session = await connectToSandbox({
+    id: initialSession.id,
+    getSession: (id) => fetch(\`/api/sandboxes/\${id}\`).then((res) => res.json())
+  });
+}`)
+                }
+                className="text-slate-400 hover:text-slate-200 text-sm font-aeonik-medium"
+              >
+                Copy
+              </button>
+            </div>
+            <pre className="p-4 text-slate-100 font-mono text-sm overflow-x-auto">
+              <code>
+                {`import { CodeSandbox } from "@codesandbox/sdk";
+ 
+const sdk = new CodeSandbox(process.env.CSB_API_KEY!);
+const sandbox = await sdk.sandboxes.create();
+              `}
+              </code>
+            </pre>
           </div>
         </>
       ) : state.current === "CONNECTED" ? (
