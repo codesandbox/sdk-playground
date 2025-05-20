@@ -6,6 +6,7 @@ import "../node_modules/@xterm/xterm/css/xterm.css";
 import { InterpretersComponent } from "./Interpreters";
 import { TasksComponent } from "./Tasks";
 import { PreviewComponent } from "./Preview";
+import { CodeExample } from "./CodeExample";
 
 type State =
   | {
@@ -178,19 +179,26 @@ function App() {
       </h1>
       {state.current === "IDLE" ? (
         <>
+          <div className="mb-8 text-center text-gray-700">
+            <p className="mb-1 font-medium max-w-2xl">
+              Experience the functionality of the SDK with this interactive
+              playground.
+            </p>
+          </div>
           <button
             onClick={handleCreateSandbox}
             className={`mb-2 px-6 py-3 rounded-lg font-semibold text-white transition-all bg-blue-500 hover:bg-blue-600`}
           >
             Create Sandbox
           </button>
-          <div className="mb-8 text-center text-gray-700">
-            <p className="mb-1 font-medium max-w-2xl">
-              Click the button above to create a Sandbox and connect. This will
-              fork a snapshot of a template already running a vite dev server
-              and wake it up on a new VM for you.
-            </p>
-          </div>
+          <CodeExample
+            title="Sandbox creation"
+            code={`
+            import { CodeSandbox } from "@codesandbox/sdk";
+            const sdk = new CodeSandbox(process.env.CSB_API_KEY!);
+            const sandbox = await sdk.sandboxes.create();
+            `}
+          />
         </>
       ) : state.current === "CONNECTED" ? (
         <>
