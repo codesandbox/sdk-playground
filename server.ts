@@ -14,18 +14,7 @@ app.post("/api/sandboxes", async (req, res) => {
 });
 app.get("/api/sandboxes/:id", async (req, res) => {
   const sandbox = await sdk.sandboxes.resume(req.params.id);
-  const session = await sandbox.createBrowserSession({
-    id: "just-me",
-    permission: "write",
-    git: {
-      accessToken: process.env.GITHUB_TOKEN,
-      email: "christianalfoni@gmail.com",
-      name: "Christian Alfoni",
-    },
-    env: {
-      FOO: "bar",
-    },
-  });
+  const session = await sandbox.createBrowserSession();
 
   res.json(session);
 });
