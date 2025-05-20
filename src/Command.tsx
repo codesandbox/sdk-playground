@@ -38,9 +38,8 @@ export function CommandComponent({ session }: { session: WebSocketSession }) {
   // NOTE: This is a simplified version of the previous useEffect
   //       for devCommand detection.
   useEffect(() => {
-    const devCommand = session.commands
-      .getAll()
-      .find((command) => command.command === "pnpm run dev");
+    const devCommand = session.commands.getAll()[0];
+
     if (devCommand) {
       setDevCommand({
         command: devCommand,
