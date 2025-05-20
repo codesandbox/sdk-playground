@@ -24,7 +24,7 @@ export function PreviewComponent({ session }: { session: WebSocketSession }) {
       }
 
       const preview = createPreview<{ type: "ping" }, { type: "pong" }>(
-        "https://" + port.host
+        port.getPreviewUrl()
       );
 
       previewRef.current = preview;
