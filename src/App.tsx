@@ -6,6 +6,7 @@ import "../node_modules/@xterm/xterm/css/xterm.css";
 import { InterpretersComponent } from "./Interpreters";
 import { TasksComponent } from "./Tasks";
 import { PreviewComponent } from "./Preview";
+import { TerminalComponent } from "./Terminal";
 
 type State =
   | {
@@ -43,8 +44,11 @@ function App() {
           progress: "Connecting to sandbox...",
         });
         try {
+          const sessionData = await fetch(`/api/sandboxes/${storedId}`).then(
+            (res) => res.json()
+          );
           const session = await connectToSandbox({
-            id: storedId,
+            session: sessionData,
             getSession: (id) =>
               fetch(`/api/sandboxes/${id}`).then((res) => res.json()),
             initStatusCb(status) {
@@ -76,36 +80,30 @@ function App() {
     });
     try {
       const res = await fetch("/api/sandboxes", { method: "POST" });
-      const initialSession = await res.json();
-      let hasConnectedInitialSession = false;
+      const sessionData = await res.json();
       // Store sandboxId in localStorage
-      localStorage.setItem("sandboxId", initialSession.id);
+      localStorage.setItem("sandboxId", sessionData.id);
       setState({
         current: "CONNECTING_TO_SANDBOX",
-        sandboxId: initialSession.id,
+        sandboxId: sessionData.id,
         progress: "Connecting to sandbox...",
       });
       const session = await connectToSandbox({
-        id: initialSession.id,
+        session: sessionData,
         getSession: (id) => {
-          if (!hasConnectedInitialSession) {
-            hasConnectedInitialSession = true;
-            return initialSession;
-          }
-
           return fetch(`/api/sandboxes/${id}`).then((res) => res.json());
         },
         initStatusCb(status) {
           setState({
             current: "CONNECTING_TO_SANDBOX",
-            sandboxId: initialSession.id,
+            sandboxId: sessionData.id,
             progress: status.message,
           });
         },
       });
       setState({
         current: "CONNECTED",
-        sandboxId: initialSession.id,
+        sandboxId: sessionData.id,
         session,
         selectedExample: null,
       });
@@ -237,6 +235,10 @@ const sandbox = await sdk.sandboxes.create();
           <div className="mb-8 text-center">Connected to Sandbox</div>
           <ExampleWrapper title="Command Example" sourcePath="Command.tsx">
             <CommandComponent session={state.session} />
+          </ExampleWrapper>
+
+          <ExampleWrapper title="Terminal Example" sourcePath="Terminal.tsx">
+            <TerminalComponent session={state.session} />
           </ExampleWrapper>
 
           <ExampleWrapper

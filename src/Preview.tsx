@@ -17,14 +17,14 @@ export function PreviewComponent({ session }: { session: WebSocketSession }) {
 
   useEffect(() => {
     if (previewContainerRef.current) {
-      const port = session.ports.getOpenedPort(5173);
+      const port = session.ports.get(5173);
 
       if (!port) {
         return;
       }
 
       const preview = createPreview<{ type: "ping" }, { type: "pong" }>(
-        "https://" + port.host
+        session.hosts.getUrl(port.port)
       );
 
       previewRef.current = preview;

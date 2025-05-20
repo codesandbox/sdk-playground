@@ -1,33 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { Task, WebSocketSession } from "@codesandbox/sdk/browser";
-import { Terminal as XTerminal } from "@xterm/xterm";
+
 import "../node_modules/@xterm/xterm/css/xterm.css";
+import { useXTerm } from "./useXTerm";
 
 export function TasksComponent({ session }: { session: WebSocketSession }) {
   const taskRef = useRef<Task | null>(null);
   const [status, setStatus] = useState("IDLE");
   const terminalContainerRef = useRef<HTMLDivElement>(null);
-  const xtermRef = useRef<XTerminal>(null);
-
-  if (!xtermRef.current) {
-    xtermRef.current = new XTerminal();
-  }
+  const xterm = useXTerm(terminalContainerRef);
 
   useEffect(() => {
-    if (!xtermRef.current || !terminalContainerRef.current) {
-      return;
-    }
-
     const devTask = session.tasks.getTask("dev");
 
     if (!devTask) {
       return;
     }
 
-    const xterm = xtermRef.current;
-    const terminalContainer = terminalContainerRef.current;
-
-    xterm.open(terminalContainer);
+    xterm.open(terminalContainerRef.current!);
 
     taskRef.current = devTask;
 
@@ -48,12 +38,15 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     return () => {
       statusChangeDisposer.dispose();
     };
-  }, []);
+  }, [session.tasks, xterm]);
   return (
     <div className="flex flex-row gap-8 items-start w-full flex-wrap md:flex-nowrap">
       {/* Left: Buttons & status */}
       <div className="flex flex-col gap-3 min-w-[180px] w-full max-w-xs">
-        <span className="mb-2 text-base font-semibold text-slate-700">Status: <span className="font-mono text-sm text-slate-900">{status}</span></span>
+        <span className="mb-2 text-base font-semibold text-slate-700">
+          Status:{" "}
+          <span className="font-mono text-sm text-slate-900">{status}</span>
+        </span>
         <button
           onClick={async () => {
             await taskRef.current?.restart();
