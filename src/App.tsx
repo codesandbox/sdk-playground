@@ -112,6 +112,24 @@ function App() {
     }
   };
 
+  const handleDisconnect = async () => {
+    if (state.current === "CONNECTED") {
+      try {
+        // Disconnect the session
+        await state.session.disconnect();
+        // Clear stored sandbox ID
+        localStorage.removeItem("sandboxId");
+        // Return to idle state
+        setState({ current: "IDLE" });
+      } catch (error) {
+        console.error("Error disconnecting:", error);
+        // Even if disconnect fails, clear localStorage and return to idle
+        localStorage.removeItem("sandboxId");
+        setState({ current: "IDLE" });
+      }
+    }
+  };
+
   // Example wrapper component for all examples
   function ExampleWrapper({
     title,
@@ -232,7 +250,17 @@ const sandbox = await sdk.sandboxes.create();
         </>
       ) : state.current === "CONNECTED" ? (
         <>
-          <div className="mb-8 text-center">Connected to Sandbox</div>
+          <div className="mb-8 text-center">
+            <div className="text-lg font-semibold text-gray-800 mb-4">
+              Connected to Sandbox: {state.sandboxId}
+            </div>
+            <button
+              onClick={handleDisconnect}
+              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg transition-all"
+            >
+              Disconnect Sandbox
+            </button>
+          </div>
           <ExampleWrapper title="Command Example" sourcePath="Command.tsx">
             <CommandComponent session={state.session} />
           </ExampleWrapper>

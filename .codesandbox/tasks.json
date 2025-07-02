@@ -30,6 +30,22 @@
     "preview": {
       "name": "preview",
       "command": "npm run preview"
+    },
+    "success-demo": {
+      "name": "success-demo",
+      "command": "echo 'Starting task...' && sleep 2 && echo 'Task completed successfully!' && echo 'All done!'"
+    },
+    "fail-demo": {
+      "name": "fail-demo", 
+      "command": "echo 'Starting task...' && sleep 1 && echo 'Something went wrong!' && exit 1"
+    },
+    "long-demo": {
+      "name": "long-demo",
+      "command": "for i in {1..10}; do echo \"Step $i of 10\"; sleep 1; done && echo 'Long task completed!'"
+    },
+    "quick-test": {
+      "name": "quick-test",
+      "command": "echo 'Quick test task' && date"
     }
   }
 }
