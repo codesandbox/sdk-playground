@@ -248,7 +248,12 @@ const sandbox = await sdk.sandboxes.create();
             <InterpretersComponent session={state.session} />
           </ExampleWrapper>
 
-          <ExampleWrapper title="Tasks Example" sourcePath="Tasks.tsx">
+          <ExampleWrapper title="Tasks API Playground" sourcePath="Tasks.tsx">
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800 font-medium">
+                📋 Interactive Tasks API demonstration with success/failure examples, real-time status monitoring, and task output streaming.
+              </p>
+            </div>
             <TasksComponent session={state.session} />
           </ExampleWrapper>
 
