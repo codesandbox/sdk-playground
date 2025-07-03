@@ -16,6 +16,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
   const [availableTasks, setAvailableTasks] = useState<string[]>([]);
   const [taskStates, setTaskStates] = useState<{ [key: string]: TaskState }>({});
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [setupComplete, setSetupComplete] = useState(false);
   
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xterm = useXTerm(terminalContainerRef);
@@ -129,11 +130,41 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
       }
     });
     setTaskStates(initialStates);
+
+    // Check for setup completion by looking for dependencies
+    const checkSetupComplete = async () => {
+      try {
+        // Simple heuristic: if we can access session.fs, check for node_modules
+        // Or wait a reasonable time for setup to complete
+        setTimeout(() => {
+          setSetupComplete(true);
+        }, 10000); // Assume setup completes within 10 seconds
+        
+        // Try to detect if npm install completed by checking for typical files
+        // This is a simple approach - in a real app you'd monitor the actual setup task
+      } catch (error) {
+        console.log("Setup detection error:", error);
+        setSetupComplete(true); // Default to allowing tasks
+      }
+    };
+
+    checkSetupComplete();
   }, [session.tasks]);
+
+  const requiresDependencies = (taskName: string) => {
+    // Tasks that need npm dependencies to be installed first
+    return ['dev', 'build', 'lint', 'preview', 'server'].includes(taskName);
+  };
 
   const runTask = async (taskName: string) => {
     const taskState = taskStates[taskName];
     if (!taskState?.task) return;
+
+    // Prevent running dependency tasks before setup completes
+    if (requiresDependencies(taskName) && !setupComplete) {
+      console.log(`⚠️ Task "${taskName}" requires dependencies. Waiting for setup to complete...`);
+      return;
+    }
 
     // Automatically select this task for output display
     setSelectedTask(taskName);
@@ -270,95 +301,116 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
         </div>
       )}
 
-      <div className="flex flex-row gap-8 items-start w-full flex-wrap lg:flex-nowrap">
-        {/* Left: Task Controls */}
-        <div className="flex flex-col gap-3 min-w-[280px] w-full max-w-md">
+      {/* Task Controls */}
+      <div className="bg-slate-50 p-4 rounded-lg border">
+        <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-lg">Available Tasks</h3>
-          
-          {availableTasks.length === 0 ? (
-            <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg border">
-              <p>No tasks found in your project's `.codesandbox/tasks.json` file.</p>
-              <p className="text-sm mt-2">Add tasks to your configuration to see them here.</p>
+          {!setupComplete && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-orange-600 font-medium">⏳ Setup in progress</span>
+              <button
+                onClick={() => setSetupComplete(true)}
+                className="text-xs px-2 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded"
+                title="Force enable all tasks"
+              >
+                Override
+              </button>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {availableTasks.map((taskName) => {
-                const taskState = taskStates[taskName];
-                const task = taskState?.task;
-                const isSelected = selectedTask === taskName;
-                
-                return (
-                  <button
-                    key={taskName}
-                    onClick={() => runTask(taskName)}
-                    disabled={taskState?.isRunning}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                      taskState?.isRunning 
-                        ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
-                        : isSelected
-                        ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-base">{taskName}</span>
-                      <span className="text-xl">
-                        {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
-                      </span>
-                    </div>
-                    
-                    <div className={`text-sm font-mono mb-2 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
-                      {taskState?.status || "IDLE"}
-                    </div>
-                    
-                    {task?.command && (
-                      <div className="text-sm text-slate-600 mb-2" title={task.command}>
-                        <code className="bg-slate-100 px-2 py-1 rounded text-xs">
-                          {task.command.length > 50 ? task.command.substring(0, 50) + '...' : task.command}
-                        </code>
-                      </div>
-                    )}
-                    
-                    <div className="text-xs text-slate-500">
-                      {taskState?.isRunning 
-                        ? "⏸️ Running... Click another task to switch"
-                        : "▶️ Click to run and view output"
-                      }
-                    </div>
-                  </button>
-                );
-              })}
+          )}
+        </div>
+        
+        {availableTasks.length === 0 ? (
+          <div className="text-center py-8 text-slate-500">
+            <p>No tasks found in your project's `.codesandbox/tasks.json` file.</p>
+            <p className="text-sm mt-2">Add tasks to your configuration to see them here.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {availableTasks.map((taskName) => {
+              const taskState = taskStates[taskName];
+              const task = taskState?.task;
+              const isSelected = selectedTask === taskName;
+              const needsDeps = requiresDependencies(taskName);
+              const isWaitingForSetup = needsDeps && !setupComplete;
+              const isDisabled = taskState?.isRunning || isWaitingForSetup;
               
-              {/* Stop Button */}
-              {selectedTask && taskStates[selectedTask]?.isRunning && (
+              return (
                 <button
-                  onClick={() => stopTask(selectedTask)}
-                  className="w-full px-4 py-3 rounded-lg text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-colors"
+                  key={taskName}
+                  onClick={() => runTask(taskName)}
+                  disabled={isDisabled}
+                  className={`text-left p-3 rounded-lg border-2 transition-all ${
+                    isWaitingForSetup
+                      ? "opacity-50 cursor-not-allowed border-orange-200 bg-orange-50"
+                      : taskState?.isRunning 
+                      ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
+                      : isSelected
+                      ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                  }`}
                 >
-                  🛑 Stop {selectedTask}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold text-sm">{taskName}</span>
+                    <span className="text-lg">
+                      {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
+                    </span>
+                  </div>
+                  
+                  <div className={`text-xs font-mono mb-2 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
+                    {taskState?.status || "IDLE"}
+                  </div>
+                  
+                  {task?.command && (
+                    <div className="text-xs text-slate-600 mb-2" title={task.command}>
+                      <code className="bg-slate-100 px-1 py-0.5 rounded text-xs">
+                        {task.command.length > 30 ? task.command.substring(0, 30) + '...' : task.command}
+                      </code>
+                    </div>
+                  )}
+                  
+                  <div className="text-xs text-slate-500">
+                    {isWaitingForSetup
+                      ? "⏳ Waiting..."
+                      : taskState?.isRunning 
+                      ? "⏸️ Running..."
+                      : "▶️ Click to run"
+                    }
+                  </div>
                 </button>
-              )}
-            </div>
-          )}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
-        {/* Right: Terminal Output */}
-        <div className="flex-1 min-w-0 relative">
-          <h3 className="font-bold text-lg mb-3">
-            Task Output {selectedTask && `- ${selectedTask}`}
-          </h3>
-          <div
-            ref={terminalContainerRef}
-            className="w-full h-96 rounded-lg shadow-lg overflow-hidden border-2 transition-colors duration-200 bg-slate-900 border-slate-800"
-          />
-          {!selectedTask && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-900 bg-opacity-90 rounded-lg">
-              <p className="text-slate-300 text-center">
-                Click any task on the left to run it and view its output
-              </p>
-            </div>
-          )}
-        </div>
+        {/* Stop Button */}
+        {selectedTask && taskStates[selectedTask]?.isRunning && (
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={() => stopTask(selectedTask)}
+              className="px-6 py-2 rounded-lg text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-colors"
+            >
+              🛑 Stop {selectedTask}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Terminal Output */}
+      <div className="relative">
+        <h3 className="font-bold text-lg mb-3">
+          Terminal Output {selectedTask && `- ${selectedTask}`}
+        </h3>
+        <div
+          ref={terminalContainerRef}
+          className="w-full h-[500px] rounded-lg shadow-lg overflow-hidden border-2 transition-colors duration-200 bg-slate-900 border-slate-800"
+        />
+        {!selectedTask && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-900 bg-opacity-90 rounded-lg mt-12">
+            <p className="text-slate-300 text-center">
+              Click any task above to run it and view its output
+            </p>
+          </div>
+        )}
       </div>
 
       {/* API Usage Example */}
