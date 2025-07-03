@@ -101,6 +101,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     uniqueTasks.forEach((task: any) => {
       const taskName = task.name || 'unnamed';
       console.log(`🎯 Setting up task: ${taskName}`, task);
+      console.log(`📊 Initial task.status for "${taskName}":`, task.status);
       
       initialStates[taskName] = {
         task: task,
@@ -114,6 +115,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
       if (typeof task.onStatusChange === 'function') {
         task.onStatusChange((status: string) => {
           console.log(`🔄 Task ${taskName} status changed:`, status);
+          console.log(`📊 Live task.status for "${taskName}":`, task.status);
           setTaskStates(prev => ({
             ...prev,
             [taskName]: {
@@ -134,10 +136,24 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     if (!taskState?.task) return;
 
     const task = taskState.task;
+    
+    console.log(`🚀 Starting task "${taskName}"`);
+    console.log(`📊 task.status before restart:`, task.status);
 
     try {
       // Use the proper task.restart() method from the docs
       await task.restart();
+      
+      console.log(`📊 task.status after restart:`, task.status);
+      
+      // Set up periodic status checking to demonstrate live task.status updates
+      const statusInterval = setInterval(() => {
+        console.log(`📊 Periodic check - task.status for "${taskName}":`, task.status);
+        if (task.status === "FINISHED" || task.status === "ERROR" || task.status === "KILLED") {
+          console.log(`✅ Task "${taskName}" completed with status:`, task.status);
+          clearInterval(statusInterval);
+        }
+      }, 1000);
       
       // Set up output listener using task.open() and task.onOutput() as documented
       if (typeof task.open === 'function' && typeof task.onOutput === 'function') {
