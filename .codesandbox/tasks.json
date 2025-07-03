@@ -4,15 +4,22 @@
     {
       "command": "npm install",
       "name": "Installing Dependencies"
+    },
+    {
+      "command": "npm list --depth=0",
+      "name": "Verifying Installation"
     }
   ],
 
   // These tasks can be run from CodeSandbox. Running one will open a log in the app.
   "tasks": {
+    "install": {
+      "name": "install",
+      "command": "npm install && echo 'Dependencies installed successfully!'"
+    },
     "dev": {
       "name": "dev",
-      "command": "npm run dev",
-      "runAtStart": true
+      "command": "npm run dev"
     },
     "build": {
       "name": "build",
@@ -20,8 +27,7 @@
     },
     "server": {
       "name": "server",
-      "command": "npm run server",
-      "runAtStart": true
+      "command": "npm run server"
     },
     "lint": {
       "name": "lint",
