@@ -31,6 +31,10 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     return taskName === 'install';
   };
 
+  const isDemoTask = (taskName: string) => {
+    return ['success-demo', 'fail-demo', 'long-demo', 'quick-test'].includes(taskName);
+  };
+
   useEffect(() => {
     console.log("🔍 Debugging Tasks API:", session.tasks);
     console.log("🔍 Available properties:", Object.keys(session.tasks));
@@ -105,13 +109,31 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     const uniqueTasks = Array.from(new Map(allTasks.map(task => [task.name, task])).values());
     const foundTaskNames = uniqueTasks.map((task: any) => task.name || 'unnamed');
     
-    // Sort tasks: install tasks first, then others
+    // Sort tasks: install first, then dependency tasks, then demo tasks, then others
     const sortedTaskNames = foundTaskNames.sort((a, b) => {
       const aIsInstall = isInstallTask(a);
       const bIsInstall = isInstallTask(b);
+      const aRequiresDeps = requiresDependencies(a);
+      const bRequiresDeps = requiresDependencies(b);
+      const aIsDemo = isDemoTask(a);
+      const bIsDemo = isDemoTask(b);
       
-      if (aIsInstall && !bIsInstall) return -1;
-      if (!aIsInstall && bIsInstall) return 1;
+      // Priority order: install > dependency tasks > demo tasks > others
+      const getTaskPriority = (taskName: string) => {
+        if (isInstallTask(taskName)) return 1;
+        if (requiresDependencies(taskName)) return 2;
+        if (isDemoTask(taskName)) return 3;
+        return 4;
+      };
+      
+      const aPriority = getTaskPriority(a);
+      const bPriority = getTaskPriority(b);
+      
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority;
+      }
+      
+      // Within same priority, sort alphabetically
       return a.localeCompare(b);
     });
     
@@ -392,59 +414,186 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
             <p className="text-sm mt-2">Add tasks to your configuration to see them here.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-            {availableTasks.map((taskName) => {
-              const taskState = taskStates[taskName];
-              const task = taskState?.task;
-              const isSelected = selectedTask === taskName;
-              const needsDeps = requiresDependencies(taskName);
-              const isWaitingForSetup = needsDeps && !installComplete;
-              const isDisabled = taskState?.isRunning || isWaitingForSetup;
-              const isInstall = isInstallTask(taskName);
-              
-              return (
-                <button
-                  key={taskName}
-                  onClick={() => runTask(taskName)}
-                  disabled={isDisabled}
-                  className={`text-left p-2 rounded border transition-all ${
-                    isInstall
-                      ? "border-green-300 bg-green-50 hover:bg-green-100 ring-2 ring-green-200"
-                      : isWaitingForSetup
-                      ? "opacity-50 cursor-not-allowed border-orange-200 bg-orange-50"
-                      : taskState?.isRunning 
-                      ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
-                      : isSelected
-                      ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
-                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-xs truncate pr-1">{taskName}</span>
-                    <span className="text-sm">
-                      {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
-                    </span>
-                  </div>
-                  
-                  <div className={`text-xs font-mono mb-1 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
-                    {taskState?.status || "IDLE"}
-                  </div>
-                  
-                  <div className={`text-xs ${isInstall ? 'text-green-600 font-medium' : isWaitingForSetup ? 'text-orange-600' : 'text-slate-500'}`}>
-                    {isInstall
-                      ? taskState?.isRunning 
-                        ? "⏸️ Installing..."
-                        : "📦 Install deps"
-                      : isWaitingForSetup
-                      ? "⏳ Run install first"
-                      : taskState?.isRunning 
-                      ? "⏸️ Running..."
-                      : "▶️ Run"
-                    }
-                  </div>
-                </button>
-              );
-            })}
+          <div className="space-y-4">
+            {/* Install Tasks Section */}
+            {availableTasks.some(name => isInstallTask(name)) && (
+              <div>
+                <h4 className="text-sm font-medium text-green-700 mb-2">📦 Setup</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                  {availableTasks.filter(name => isInstallTask(name)).map((taskName) => {
+                    const taskState = taskStates[taskName];
+                    const isSelected = selectedTask === taskName;
+                    const isDisabled = taskState?.isRunning;
+                    
+                    return (
+                      <button
+                        key={taskName}
+                        onClick={() => runTask(taskName)}
+                        disabled={isDisabled}
+                        className={`text-left p-2 rounded border transition-all border-green-300 bg-green-50 hover:bg-green-100 ring-2 ring-green-200 ${
+                          isSelected ? "ring-4 ring-green-400" : ""
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-xs truncate pr-1">{taskName}</span>
+                          <span className="text-sm">
+                            {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
+                          </span>
+                        </div>
+                        
+                        <div className={`text-xs font-mono mb-1 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
+                          {taskState?.status || "IDLE"}
+                        </div>
+                        
+                        <div className="text-xs text-green-600 font-medium">
+                          {taskState?.isRunning ? "⏸️ Installing..." : "📦 Install deps"}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Dependency Tasks Section */}
+            {availableTasks.some(name => requiresDependencies(name)) && (
+              <div>
+                <h4 className="text-sm font-medium text-slate-700 mb-2">🔧 Development Tasks</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                  {availableTasks.filter(name => requiresDependencies(name)).map((taskName) => {
+                    const taskState = taskStates[taskName];
+                    const isSelected = selectedTask === taskName;
+                    const isWaitingForSetup = !installComplete;
+                    const isDisabled = taskState?.isRunning || isWaitingForSetup;
+                    
+                    return (
+                      <button
+                        key={taskName}
+                        onClick={() => runTask(taskName)}
+                        disabled={isDisabled}
+                        className={`text-left p-2 rounded border transition-all ${
+                          isWaitingForSetup
+                            ? "opacity-50 cursor-not-allowed border-orange-200 bg-orange-50"
+                            : taskState?.isRunning 
+                            ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
+                            : isSelected
+                            ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-xs truncate pr-1">{taskName}</span>
+                          <span className="text-sm">
+                            {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
+                          </span>
+                        </div>
+                        
+                        <div className={`text-xs font-mono mb-1 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
+                          {taskState?.status || "IDLE"}
+                        </div>
+                        
+                        <div className={`text-xs ${isWaitingForSetup ? 'text-orange-600' : 'text-slate-500'}`}>
+                          {isWaitingForSetup
+                            ? "⏳ Run install first"
+                            : taskState?.isRunning 
+                            ? "⏸️ Running..."
+                            : "▶️ Run"
+                          }
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Demo Tasks Section */}
+            {availableTasks.some(name => isDemoTask(name)) && (
+              <div>
+                <h4 className="text-sm font-medium text-purple-700 mb-2">🎯 Demo Tasks</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                  {availableTasks.filter(name => isDemoTask(name)).map((taskName) => {
+                    const taskState = taskStates[taskName];
+                    const isSelected = selectedTask === taskName;
+                    const isDisabled = taskState?.isRunning;
+                    
+                    return (
+                      <button
+                        key={taskName}
+                        onClick={() => runTask(taskName)}
+                        disabled={isDisabled}
+                        className={`text-left p-2 rounded border transition-all ${
+                          taskState?.isRunning 
+                            ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
+                            : isSelected
+                            ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
+                            : "border-purple-200 bg-purple-50 hover:border-purple-300 hover:bg-purple-100"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-xs truncate pr-1">{taskName}</span>
+                          <span className="text-sm">
+                            {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
+                          </span>
+                        </div>
+                        
+                        <div className={`text-xs font-mono mb-1 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
+                          {taskState?.status || "IDLE"}
+                        </div>
+                        
+                        <div className="text-xs text-purple-600">
+                          {taskState?.isRunning ? "⏸️ Running..." : "▶️ Run"}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Other Tasks Section */}
+            {availableTasks.some(name => !isInstallTask(name) && !requiresDependencies(name) && !isDemoTask(name)) && (
+              <div>
+                <h4 className="text-sm font-medium text-slate-700 mb-2">📋 Other Tasks</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                  {availableTasks.filter(name => !isInstallTask(name) && !requiresDependencies(name) && !isDemoTask(name)).map((taskName) => {
+                    const taskState = taskStates[taskName];
+                    const isSelected = selectedTask === taskName;
+                    const isDisabled = taskState?.isRunning;
+                    
+                    return (
+                      <button
+                        key={taskName}
+                        onClick={() => runTask(taskName)}
+                        disabled={isDisabled}
+                        className={`text-left p-2 rounded border transition-all ${
+                          taskState?.isRunning 
+                            ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
+                            : isSelected
+                            ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-xs truncate pr-1">{taskName}</span>
+                          <span className="text-sm">
+                            {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
+                          </span>
+                        </div>
+                        
+                        <div className={`text-xs font-mono mb-1 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
+                          {taskState?.status || "IDLE"}
+                        </div>
+                        
+                        <div className="text-xs text-slate-500">
+                          {taskState?.isRunning ? "⏸️ Running..." : "▶️ Run"}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
