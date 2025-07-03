@@ -135,6 +135,9 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     const taskState = taskStates[taskName];
     if (!taskState?.task) return;
 
+    // Automatically select this task for output display
+    setSelectedTask(taskName);
+
     const task = taskState.task;
     
     console.log(`🚀 Starting task "${taskName}"`);
@@ -168,10 +171,9 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
           }
         }));
 
-        if (selectedTask === taskName) {
-          xterm.clear();
-          xterm.write(initialOutput || "");
-        }
+        // Always show output since we auto-selected this task
+        xterm.clear();
+        xterm.write(initialOutput || "");
 
         // Listen for new output
         task.onOutput((output: string) => {
@@ -183,9 +185,8 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
             }
           }));
 
-          if (selectedTask === taskName) {
-            xterm.write(output);
-          }
+          // Always write to terminal since this is the active task
+          xterm.write(output);
         });
       }
 
@@ -220,24 +221,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     }
   };
 
-  const selectTask = (taskName: string) => {
-    setSelectedTask(taskName);
-    const taskState = taskStates[taskName];
-    
-    xterm.clear();
-    if (taskState?.output) {
-      xterm.write(taskState.output);
-    }
 
-    // If task exists and is running, connect to its output
-    if (taskState?.task && taskState.isRunning) {
-      if (typeof (taskState.task as any).open === 'function') {
-        (taskState.task as any).open().then((output: string) => {
-          xterm.write(output);
-        });
-      }
-    }
-  };
 
   const getStatusColor = (status: string, hasError: boolean) => {
     // SDK task statuses: "RUNNING" | "FINISHED" | "ERROR" | "KILLED" | "RESTARTING" | "IDLE"
@@ -267,148 +251,110 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      {/* Task Status Overview */}
-      <div className="bg-slate-50 p-4 rounded-lg border">
-        <h3 className="font-bold text-lg mb-4">Tasks Status Overview</h3>
-        {availableTasks.length === 0 ? (
-          <div className="text-center py-8 text-slate-500">
-            <p>No tasks found in your project's `.codesandbox/tasks.json` file.</p>
-            <p className="text-sm mt-2">Add tasks to your configuration to see them here.</p>
-          </div>
-        ) : !availableTasks.some(name => ['success-demo', 'fail-demo', 'long-demo', 'quick-test'].includes(name)) ? (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-            <div className="flex items-start gap-3">
-              <span className="text-yellow-600 text-lg">⚠️</span>
-              <div>
-                <p className="text-yellow-800 font-medium">Custom demo tasks not found</p>
-                <p className="text-yellow-700 text-sm mt-1">
-                  You're connected to a sandbox that doesn't include our custom demo tasks (success-demo, fail-demo, etc.). 
-                  <strong> Disconnect and create a new sandbox</strong> to see the full Tasks API demonstration.
-                </p>
-                <p className="text-yellow-600 text-xs mt-2">
-                  Found tasks: {availableTasks.join(', ') || 'none'}
-                </p>
-              </div>
+      {/* Warning for missing demo tasks */}
+      {availableTasks.length > 0 && !availableTasks.some(name => ['success-demo', 'fail-demo', 'long-demo', 'quick-test'].includes(name)) && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-yellow-600 text-lg">⚠️</span>
+            <div>
+              <p className="text-yellow-800 font-medium">Custom demo tasks not found</p>
+              <p className="text-yellow-700 text-sm mt-1">
+                You're connected to a sandbox that doesn't include our custom demo tasks (success-demo, fail-demo, etc.). 
+                <strong> Disconnect and create a new sandbox</strong> to see the full Tasks API demonstration.
+              </p>
+              <p className="text-yellow-600 text-xs mt-2">
+                Found tasks: {availableTasks.join(', ') || 'none'}
+              </p>
             </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {availableTasks.map((taskName) => {
-              const taskState = taskStates[taskName];
-              const task = taskState?.task;
-              
-              return (
-                <div
-                  key={taskName}
-                  className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                    selectedTask === taskName 
-                      ? "border-blue-500 bg-blue-50" 
-                      : "border-slate-200 hover:border-slate-300 bg-white"
-                  }`}
-                  onClick={() => selectTask(taskName)}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-sm">{taskName}</span>
-                    <span className="text-lg">
-                      {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
-                    </span>
-                  </div>
-                  <div className={`text-xs font-mono ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
-                    {taskState?.status || "IDLE"}
-                  </div>
-                  {task?.command && (
-                    <div className="text-xs text-slate-500 mt-1 truncate" title={task.command}>
-                      {task.command}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="flex flex-row gap-8 items-start w-full flex-wrap lg:flex-nowrap">
         {/* Left: Task Controls */}
-        <div className="flex flex-col gap-3 min-w-[220px] w-full max-w-sm">
-          <h4 className="font-bold text-base">Task Controls</h4>
+        <div className="flex flex-col gap-3 min-w-[280px] w-full max-w-md">
+          <h3 className="font-bold text-lg">Available Tasks</h3>
           
           {availableTasks.length === 0 ? (
-            <div className="text-sm text-slate-500 p-3 bg-slate-50 rounded-lg">
-              No tasks available. Add tasks to your `.codesandbox/tasks.json` file to get started.
+            <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg border">
+              <p>No tasks found in your project's `.codesandbox/tasks.json` file.</p>
+              <p className="text-sm mt-2">Add tasks to your configuration to see them here.</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              <h5 className="font-medium text-sm text-slate-700">Available Tasks:</h5>
+            <div className="space-y-3">
               {availableTasks.map((taskName) => {
                 const taskState = taskStates[taskName];
                 const task = taskState?.task;
+                const isSelected = selectedTask === taskName;
                 
                 return (
                   <button
                     key={taskName}
                     onClick={() => runTask(taskName)}
                     disabled={taskState?.isRunning}
-                    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors bg-slate-100 hover:bg-slate-200 text-slate-800 ${
-                      taskState?.isRunning ? "opacity-50 cursor-not-allowed" : ""
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                      taskState?.isRunning 
+                        ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
+                        : isSelected
+                        ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
+                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span>{taskState?.isRunning ? "Running..." : `Run ${taskName}`}</span>
-                      <span className="text-xs opacity-60">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-base">{taskName}</span>
+                      <span className="text-xl">
                         {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
                       </span>
                     </div>
+                    
+                    <div className={`text-sm font-mono mb-2 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
+                      {taskState?.status || "IDLE"}
+                    </div>
+                    
                     {task?.command && (
-                      <div className="text-xs text-slate-500 mt-1 truncate">
-                        {task.command}
+                      <div className="text-sm text-slate-600 mb-2" title={task.command}>
+                        <code className="bg-slate-100 px-2 py-1 rounded text-xs">
+                          {task.command.length > 50 ? task.command.substring(0, 50) + '...' : task.command}
+                        </code>
                       </div>
                     )}
+                    
+                    <div className="text-xs text-slate-500">
+                      {taskState?.isRunning 
+                        ? "⏸️ Running... Click another task to switch"
+                        : "▶️ Click to run and view output"
+                      }
+                    </div>
                   </button>
                 );
               })}
-            </div>
-          )}
-
-          {/* Stop Button */}
-          {selectedTask && taskStates[selectedTask]?.isRunning && (
-            <button
-              onClick={() => stopTask(selectedTask)}
-              className="w-full px-3 py-2 rounded-md text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-colors"
-            >
-              Stop {selectedTask}
-            </button>
-          )}
-
-          {/* Selected Task Info */}
-          {selectedTask && (
-            <div className="mt-4 p-3 bg-slate-100 rounded-lg">
-              <h5 className="font-medium text-sm mb-2">Selected Task:</h5>
-              <div className="text-sm text-slate-700">
-                <div><strong>Name:</strong> {selectedTask}</div>
-                <div className="flex items-center gap-2">
-                  <strong>Status:</strong> 
-                  <span className={getStatusColor(taskStates[selectedTask]?.status || "IDLE", taskStates[selectedTask]?.hasError || false)}>
-                    {getStatusIcon(taskStates[selectedTask]?.status || "IDLE", taskStates[selectedTask]?.hasError || false)} 
-                    {taskStates[selectedTask]?.status || "IDLE"}
-                  </span>
-                </div>
-              </div>
+              
+              {/* Stop Button */}
+              {selectedTask && taskStates[selectedTask]?.isRunning && (
+                <button
+                  onClick={() => stopTask(selectedTask)}
+                  className="w-full px-4 py-3 rounded-lg text-sm font-medium bg-red-500 hover:bg-red-600 text-white transition-colors"
+                >
+                  🛑 Stop {selectedTask}
+                </button>
+              )}
             </div>
           )}
         </div>
 
         {/* Right: Terminal Output */}
         <div className="flex-1 min-w-0 relative">
-          <h4 className="font-bold text-base mb-3">Task Output {selectedTask && `(${selectedTask})`}</h4>
+          <h3 className="font-bold text-lg mb-3">
+            Task Output {selectedTask && `- ${selectedTask}`}
+          </h3>
           <div
             ref={terminalContainerRef}
-            className="w-full h-80 rounded-lg shadow-lg overflow-hidden border-2 transition-colors duration-200 bg-slate-900 border-slate-800"
+            className="w-full h-96 rounded-lg shadow-lg overflow-hidden border-2 transition-colors duration-200 bg-slate-900 border-slate-800"
           />
           {!selectedTask && (
             <div className="absolute inset-0 flex items-center justify-center bg-slate-900 bg-opacity-90 rounded-lg">
               <p className="text-slate-300 text-center">
-                Select a task from the status overview above to view its output
+                Click any task on the left to run it and view its output
               </p>
             </div>
           )}
