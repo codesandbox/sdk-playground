@@ -16,10 +16,20 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
   const [availableTasks, setAvailableTasks] = useState<string[]>([]);
   const [taskStates, setTaskStates] = useState<{ [key: string]: TaskState }>({});
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
-  const [setupComplete, setSetupComplete] = useState(false);
+  const [installComplete, setInstallComplete] = useState(false);
   
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xterm = useXTerm(terminalContainerRef);
+
+  // Helper functions (defined before useEffect to avoid reference errors)
+  const requiresDependencies = (taskName: string) => {
+    // Tasks that need npm dependencies to be installed first
+    return ['dev', 'build', 'lint', 'preview', 'server'].includes(taskName);
+  };
+
+  const isInstallTask = (taskName: string) => {
+    return taskName === 'install';
+  };
 
   useEffect(() => {
     console.log("🔍 Debugging Tasks API:", session.tasks);
@@ -94,8 +104,19 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     // Remove duplicates and log results
     const uniqueTasks = Array.from(new Map(allTasks.map(task => [task.name, task])).values());
     const foundTaskNames = uniqueTasks.map((task: any) => task.name || 'unnamed');
-    console.log("📋 Final unique task names:", foundTaskNames);
-    setAvailableTasks(foundTaskNames);
+    
+    // Sort tasks: install tasks first, then others
+    const sortedTaskNames = foundTaskNames.sort((a, b) => {
+      const aIsInstall = isInstallTask(a);
+      const bIsInstall = isInstallTask(b);
+      
+      if (aIsInstall && !bIsInstall) return -1;
+      if (!aIsInstall && bIsInstall) return 1;
+      return a.localeCompare(b);
+    });
+    
+    console.log("📋 Final sorted task names:", sortedTaskNames);
+    setAvailableTasks(sortedTaskNames);
 
     // Initialize task states
     const initialStates: { [key: string]: TaskState } = {};
@@ -126,47 +147,43 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
               hasError: status === "ERROR"
             }
           }));
+          
+          // Track install completion in real-time
+          if (isInstallTask(taskName) && status === "FINISHED") {
+            console.log(`✅ Install task "${taskName}" completed successfully via status change`);
+            setInstallComplete(true);
+          }
         });
       }
     });
     setTaskStates(initialStates);
 
-    // Check for setup completion by looking for dependencies
-    const checkSetupComplete = async () => {
-      try {
-        // Simple heuristic: if we can access session.fs, check for node_modules
-        // Or wait a reasonable time for setup to complete
-        setTimeout(() => {
-          setSetupComplete(true);
-        }, 10000); // Assume setup completes within 10 seconds
-        
-        // Try to detect if npm install completed by checking for typical files
-        // This is a simple approach - in a real app you'd monitor the actual setup task
-      } catch (error) {
-        console.log("Setup detection error:", error);
-        setSetupComplete(true); // Default to allowing tasks
+    // Check for install completion by monitoring install task status
+    const checkInstallComplete = () => {
+      // Install is complete if we have tasks and no install task is running
+      const hasInstallTask = uniqueTasks.some((task: any) => isInstallTask(task.name));
+      if (!hasInstallTask) {
+        // If no install task exists, assume dependencies are ready
+        setInstallComplete(true);
+      } else {
+        // If install task exists, check if it has completed
+        const installTask = uniqueTasks.find((task: any) => isInstallTask(task.name));
+        if (installTask && installTask.status === "FINISHED") {
+          setInstallComplete(true);
+        }
       }
     };
 
-    checkSetupComplete();
+    checkInstallComplete();
   }, [session.tasks]);
-
-  const requiresDependencies = (taskName: string) => {
-    // Tasks that need npm dependencies to be installed first
-    return ['dev', 'build', 'lint', 'preview', 'server'].includes(taskName);
-  };
-
-  const isInstallTask = (taskName: string) => {
-    return taskName === 'install';
-  };
 
   const runTask = async (taskName: string) => {
     const taskState = taskStates[taskName];
     if (!taskState?.task) return;
 
-    // Prevent running dependency tasks before setup completes
-    if (requiresDependencies(taskName) && !setupComplete) {
-      console.log(`⚠️ Task "${taskName}" requires dependencies. Waiting for setup to complete...`);
+    // Prevent running dependency tasks before install completes
+    if (requiresDependencies(taskName) && !installComplete) {
+      console.log(`⚠️ Task "${taskName}" requires dependencies. Run install task first...`);
       return;
     }
 
@@ -193,7 +210,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
         }
       }, 1000);
       
-      // Set up output listener using task.open() and task.onOutput() as documented
+        // Set up output listener using task.open() and task.onOutput() as documented
       if (typeof task.open === 'function' && typeof task.onOutput === 'function') {
         // Get initial output
         const initialOutput = await task.open();
@@ -223,6 +240,20 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
           // Always write to terminal since this is the active task
           xterm.write(output);
         });
+      }
+      
+      // Track install completion
+      if (isInstallTask(taskName)) {
+        const installInterval = setInterval(() => {
+          if (task.status === "FINISHED") {
+            console.log(`✅ Install task "${taskName}" completed successfully`);
+            setInstallComplete(true);
+            clearInterval(installInterval);
+          } else if (task.status === "ERROR") {
+            console.log(`❌ Install task "${taskName}" failed`);
+            clearInterval(installInterval);
+          }
+        }, 1000);
       }
 
     } catch (error) {
@@ -306,15 +337,31 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
       )}
 
       {/* Dependency warning */}
-      {availableTasks.some(name => requiresDependencies(name)) && availableTasks.includes('install') && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      {availableTasks.some(name => requiresDependencies(name)) && availableTasks.includes('install') && !installComplete && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
-            <span className="text-blue-600 text-lg">💡</span>
+            <span className="text-green-600 text-lg">🚀</span>
             <div>
-              <p className="text-blue-800 font-medium">Dependencies Required</p>
-              <p className="text-blue-700 text-sm mt-1">
-                Some tasks require npm packages to be installed first. If you see "command not found" errors, 
-                <strong> run the "install" task</strong> to install dependencies.
+              <p className="text-green-800 font-medium">Getting Started</p>
+              <p className="text-green-700 text-sm mt-1">
+                <strong>Step 1:</strong> Run the highlighted "install" task below to install npm dependencies.
+                <br />
+                <strong>Step 2:</strong> Once complete, other tasks will be enabled automatically.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Install completion notification */}
+      {installComplete && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-green-600 text-lg">✅</span>
+            <div>
+              <p className="text-green-800 font-medium">Dependencies Ready!</p>
+              <p className="text-green-700 text-sm mt-1">
+                All npm packages are installed. You can now run any task below.
               </p>
             </div>
           </div>
@@ -325,11 +372,11 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
       <div className="bg-slate-50 p-4 rounded-lg border">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-lg">Available Tasks</h3>
-          {!setupComplete && (
+          {!installComplete && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-orange-600 font-medium">⏳ Setup in progress</span>
+              <span className="text-xs text-orange-600 font-medium">⚠️ Install dependencies first</span>
               <button
-                onClick={() => setSetupComplete(true)}
+                onClick={() => setInstallComplete(true)}
                 className="text-xs px-2 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded"
                 title="Force enable all tasks"
               >
@@ -351,7 +398,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
               const task = taskState?.task;
               const isSelected = selectedTask === taskName;
               const needsDeps = requiresDependencies(taskName);
-              const isWaitingForSetup = needsDeps && !setupComplete;
+              const isWaitingForSetup = needsDeps && !installComplete;
               const isDisabled = taskState?.isRunning || isWaitingForSetup;
               const isInstall = isInstallTask(taskName);
               
@@ -383,13 +430,13 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
                     {taskState?.status || "IDLE"}
                   </div>
                   
-                  <div className={`text-xs ${isInstall ? 'text-green-600 font-medium' : 'text-slate-500'}`}>
+                  <div className={`text-xs ${isInstall ? 'text-green-600 font-medium' : isWaitingForSetup ? 'text-orange-600' : 'text-slate-500'}`}>
                     {isInstall
                       ? taskState?.isRunning 
                         ? "⏸️ Installing..."
                         : "📦 Install deps"
                       : isWaitingForSetup
-                      ? "⏳ Waiting..."
+                      ? "⏳ Run install first"
                       : taskState?.isRunning 
                       ? "⏸️ Running..."
                       : "▶️ Run"

@@ -261,7 +261,24 @@ const sandbox = await sdk.sandboxes.create();
               Disconnect Sandbox
             </button>
           </div>
+          <ExampleWrapper title="Tasks API Playground" sourcePath="Tasks.tsx">
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800 font-medium">
+                📋 Interactive Tasks API demonstration with success/failure examples, real-time status monitoring, and task output streaming.
+              </p>
+              <p className="text-sm text-blue-700 mt-2">
+                💡 <strong>Start here:</strong> Run the "install" task first to install dependencies required by other examples below.
+              </p>
+            </div>
+            <TasksComponent session={state.session} />
+          </ExampleWrapper>
+
           <ExampleWrapper title="Command Example" sourcePath="Command.tsx">
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800 font-medium">
+                ⚠️ <strong>Requires dependencies:</strong> Run the "install" task above first if you see "command not found" errors.
+              </p>
+            </div>
             <CommandComponent session={state.session} />
           </ExampleWrapper>
 
@@ -274,15 +291,6 @@ const sandbox = await sdk.sandboxes.create();
             sourcePath="Interpreters.tsx"
           >
             <InterpretersComponent session={state.session} />
-          </ExampleWrapper>
-
-          <ExampleWrapper title="Tasks API Playground" sourcePath="Tasks.tsx">
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800 font-medium">
-                📋 Interactive Tasks API demonstration with success/failure examples, real-time status monitoring, and task output streaming.
-              </p>
-            </div>
-            <TasksComponent session={state.session} />
           </ExampleWrapper>
 
           <ExampleWrapper title="Preview Example" sourcePath="Preview.tsx">
