@@ -156,6 +156,10 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     return ['dev', 'build', 'lint', 'preview', 'server'].includes(taskName);
   };
 
+  const isInstallTask = (taskName: string) => {
+    return taskName === 'install';
+  };
+
   const runTask = async (taskName: string) => {
     const taskState = taskStates[taskName];
     if (!taskState?.task) return;
@@ -301,6 +305,22 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
         </div>
       )}
 
+      {/* Dependency warning */}
+      {availableTasks.some(name => requiresDependencies(name)) && availableTasks.includes('install') && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-blue-600 text-lg">💡</span>
+            <div>
+              <p className="text-blue-800 font-medium">Dependencies Required</p>
+              <p className="text-blue-700 text-sm mt-1">
+                Some tasks require npm packages to be installed first. If you see "command not found" errors, 
+                <strong> run the "install" task</strong> to install dependencies.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Task Controls */}
       <div className="bg-slate-50 p-4 rounded-lg border">
         <div className="flex items-center justify-between mb-4">
@@ -325,7 +345,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
             <p className="text-sm mt-2">Add tasks to your configuration to see them here.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
             {availableTasks.map((taskName) => {
               const taskState = taskStates[taskName];
               const task = taskState?.task;
@@ -333,14 +353,17 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
               const needsDeps = requiresDependencies(taskName);
               const isWaitingForSetup = needsDeps && !setupComplete;
               const isDisabled = taskState?.isRunning || isWaitingForSetup;
+              const isInstall = isInstallTask(taskName);
               
               return (
                 <button
                   key={taskName}
                   onClick={() => runTask(taskName)}
                   disabled={isDisabled}
-                  className={`text-left p-3 rounded-lg border-2 transition-all ${
-                    isWaitingForSetup
+                  className={`text-left p-2 rounded border transition-all ${
+                    isInstall
+                      ? "border-green-300 bg-green-50 hover:bg-green-100 ring-2 ring-green-200"
+                      : isWaitingForSetup
                       ? "opacity-50 cursor-not-allowed border-orange-200 bg-orange-50"
                       : taskState?.isRunning 
                       ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
@@ -349,31 +372,27 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
                       : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold text-sm">{taskName}</span>
-                    <span className="text-lg">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-xs truncate pr-1">{taskName}</span>
+                    <span className="text-sm">
                       {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
                     </span>
                   </div>
                   
-                  <div className={`text-xs font-mono mb-2 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
+                  <div className={`text-xs font-mono mb-1 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
                     {taskState?.status || "IDLE"}
                   </div>
                   
-                  {task?.command && (
-                    <div className="text-xs text-slate-600 mb-2" title={task.command}>
-                      <code className="bg-slate-100 px-1 py-0.5 rounded text-xs">
-                        {task.command.length > 30 ? task.command.substring(0, 30) + '...' : task.command}
-                      </code>
-                    </div>
-                  )}
-                  
-                  <div className="text-xs text-slate-500">
-                    {isWaitingForSetup
+                  <div className={`text-xs ${isInstall ? 'text-green-600 font-medium' : 'text-slate-500'}`}>
+                    {isInstall
+                      ? taskState?.isRunning 
+                        ? "⏸️ Installing..."
+                        : "📦 Install deps"
+                      : isWaitingForSetup
                       ? "⏳ Waiting..."
                       : taskState?.isRunning 
                       ? "⏸️ Running..."
-                      : "▶️ Click to run"
+                      : "▶️ Run"
                     }
                   </div>
                 </button>
