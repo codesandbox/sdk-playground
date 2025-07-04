@@ -81,12 +81,22 @@
             // Start ball moving randomly
             ball.dx = (Math.random() > 0.5 ? 1 : -1) * ball.speed;
             ball.dy = (Math.random() - 0.5) * ball.speed;
+            
+            // Send game started message using SDK protocol
+            if (previewProtocol) {
+                previewProtocol.sendMessage({ type: 'game_started' });
+            }
         }
         
         function stopGame() {
             console.log('🛑 Stopping Pong game');
             gameActive = false;
             resetBall();
+            
+            // Send game stopped message using SDK protocol
+            if (previewProtocol) {
+                previewProtocol.sendMessage({ type: 'game_stopped' });
+            }
         }
         
         function gameLoop() {
@@ -265,32 +275,27 @@
             }
         }
         
-        // Preview protocol setup
-        console.log('🎮 Pong game loaded, waiting for preview protocol...');
-        
-        // This will be called by the preview protocol injection
-        window.setupPreviewProtocol = function(protocol) {
-            console.log('📡 Preview protocol connected to Pong game');
+        // SDK-compatible setup function that will be called by the injected code
+        window.setupPongCommunication = function(protocol) {
+            console.log('📡 IFRAME: Pong communication protocol received from SDK injection');
             previewProtocol = protocol;
             
-            // Listen for messages from parent
+            // Listen for messages from parent using SDK protocol
             protocol.addListener('start', function(data) {
-                console.log('🎮 Received start message');
+                console.log('🎮 IFRAME: Received start command via SDK');
                 scores = { player: 0, ai: 0 };
                 startGame();
-                // Send confirmation back to parent
-                protocol.sendMessage({ type: 'game_started' });
             });
             
             protocol.addListener('stop', function(data) {
-                console.log('🛑 Received stop message');
+                console.log('🛑 IFRAME: Received stop command via SDK');
                 stopGame();
-                // Send confirmation back to parent
-                protocol.sendMessage({ type: 'game_stopped' });
             });
             
-            console.log('✅ Pong game protocol ready');
+            console.log('✅ IFRAME: Pong communication protocol established');
         };
+        
+        console.log('🎮 Pong game loaded, waiting for SDK communication setup...');
         
         // Start the game loop
         gameLoop();

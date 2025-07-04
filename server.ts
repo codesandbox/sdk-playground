@@ -1,16 +1,19 @@
-import { config } from "dotenv";
 import { CodeSandbox } from "@codesandbox/sdk";
 import express from "express";
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Load environment variables from .env file
-config();
+// Validate API key is available from environment
+if (!process.env.CSB_API_KEY) {
+  console.error("❌ CSB_API_KEY environment variable is not set!");
+  console.error("   Please set CSB_API_KEY in your environment");
+  process.exit(1);
+}
 
 const app = express();
 const sdk = new CodeSandbox(process.env.CSB_API_KEY);
 
-
+console.log("✅ CodeSandbox SDK initialized successfully");
 
 app.post("/api/sandboxes", async (req, res) => {
   try {
@@ -37,7 +40,7 @@ app.post("/api/sandboxes", async (req, res) => {
       "description": "CodeSandbox Tasks API demonstration",
       "main": "index.js",
       "scripts": {
-        "dev": "python3 -m http.server 3000",
+        "dev": "node -e \"const http = require('http'); const fs = require('fs'); const path = require('path'); const server = http.createServer((req, res) => { res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.setHeader('X-Content-Type-Options', \\\"default-src 'self' 'unsafe-inline' 'unsafe-eval' https://codesandbox.io https://*.csb.app; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://codesandbox.io https://*.csb.app; style-src 'self' 'unsafe-inline'; frame-ancestors *\\\"); if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; } let filePath = req.url === '/' ? '/index.html' : req.url; try { const content = fs.readFileSync('.' + filePath, 'utf8'); const ext = path.extname(filePath); const contentType = ext === '.html' ? 'text/html' : ext === '.js' ? 'application/javascript' : ext === '.css' ? 'text/css' : 'text/plain'; res.writeHead(200, {'Content-Type': contentType + '; charset=utf-8'}); res.end(content); } catch(e) { res.writeHead(404, {'Content-Type': 'text/html'}); res.end('<h1>404 Not Found</h1><p>File not found: ' + filePath + '</p>'); } }); server.listen(3000, () => console.log('🌐 HTTP server running on port 3000 with full CodeSandbox domain support'));\"",
         "build": "npm install --no-save uglify-js html-minifier-terser && rm -rf dist && mkdir -p dist && npx html-minifier-terser --collapse-whitespace --remove-comments --remove-optional-tags --remove-redundant-attributes --remove-script-type-attributes --remove-tag-whitespace --use-short-doctype --minify-css true --minify-js true index.html -o dist/index.html && find . -name '*.js' -not -path './node_modules/*' -not -path './dist/*' -exec cat {} \\; > dist/bundle.tmp.js && (test -s dist/bundle.tmp.js && npx uglify-js dist/bundle.tmp.js -o dist/bundle.min.js -c -m) && rm -f dist/bundle.tmp.js && node -e \"const fs=require('fs'); const stats={name:'codesandbox-tasks-demo',version:'1.0.0',buildTime:new Date().toISOString(),files:fs.readdirSync('dist'),sizes:fs.readdirSync('dist').reduce((acc,f)=>{try{acc[f]=fs.statSync('dist/'+f).size+'B'}catch(e){acc[f]='0B'} return acc},{})};fs.writeFileSync('dist/build-stats.json',JSON.stringify(stats,null,2));console.log('Build complete!');console.log('Files:',Object.keys(stats.sizes).join(', '));console.log('Total files:',stats.files.length);\" && ls -la dist/",
         "start": "node -e \"const http = require('http'); const fs = require('fs'); const server = http.createServer((req, res) => { try { const html = fs.readFileSync('dist/index.html', 'utf8'); res.writeHead(200, {'Content-Type': 'text/html'}); res.end(html); } catch(e) { res.writeHead(404); res.end('<h1>Build not found</h1><p>Run build task first!</p>'); } }); server.listen(8080, () => console.log('Production server running on port 8080'));\"",
         "test": "node -e \"const fs = require('fs'); const assert = require('assert'); try { const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); assert(pkg.name); assert(pkg.version); console.log('✓ package.json is valid'); } catch(e) { console.error('✗ package.json test failed:', e.message); process.exit(1); } try { fs.accessSync('index.html', fs.constants.R_OK); console.log('✓ index.html is readable'); } catch(e) { console.error('✗ index.html test failed:', e.message); process.exit(1); } console.log('All tests passed!');\"",
@@ -57,7 +60,7 @@ app.post("/api/sandboxes", async (req, res) => {
     const tasksConfig = {
       "tasks": {
         "dev": {
-          "name": "Development Server",
+          "name": "Development Server (Node.js)",
           "command": "npm run dev",
           "runAtStart": false,
           "preview": {

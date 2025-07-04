@@ -47,10 +47,15 @@ function App() {
           const sessionData = await fetch(`/api/sandboxes/${storedId}`).then(
             (res) => res.json()
           );
+          console.log("🔍 DEBUG: Reconnecting to stored sandbox:", storedId);
+          console.log("🔍 DEBUG: Session data for stored sandbox:", sessionData);
+          
           const client = await connectToSandbox({
             session: sessionData.session,
             getSession: (id) => fetch(`/api/sandboxes/${id}`).then(res => res.json()).then(data => data.session)
           });
+          
+          console.log("🔍 DEBUG: Reconnected client:", client);
           setState({
             current: "CONNECTED",
             sandboxId: storedId,
@@ -81,6 +86,9 @@ function App() {
         sandboxId: sessionData.id,
         progress: "Connecting to sandbox...",
       });
+      console.log("🔍 DEBUG: Creating sandbox returned:", sessionData);
+      console.log("🔍 DEBUG: Sandbox ID from server:", sessionData.id);
+      
       const client = await connectToSandbox({
         session: sessionData.session,
         getSession: (id) => fetch(`/api/sandboxes/${id}`).then(res => res.json()).then(data => data.session),
@@ -92,6 +100,8 @@ function App() {
           });
         },
       });
+      
+      console.log("🔍 DEBUG: Connected client:", client);
       setState({
         current: "CONNECTED",
         sandboxId: sessionData.id,

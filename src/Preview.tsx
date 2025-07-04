@@ -11,6 +11,7 @@ import "../node_modules/@xterm/xterm/css/xterm.css";
 declare global {
   interface Window {
     setupPreviewProtocol?: (previewProtocol: any) => void;
+    setupPongCommunication?: (previewProtocol: any) => void;
   }
 }
 
@@ -28,7 +29,6 @@ export function PreviewComponent({ session }: { session: SandboxClient }) {
     const container = previewContainerRef.current;
     if (container && session) {
       // Create preview using the sandbox URL for port 3000 (dev server)
-      // This will serve our Pong game HTML file
       const previewUrl = session.hosts.getUrl(3000);
       console.log("🌐 Creating preview for Pong game at port 3000:", previewUrl);
 
@@ -41,7 +41,7 @@ export function PreviewComponent({ session }: { session: SandboxClient }) {
       preview.iframe.style.height = "100%";
       preview.iframe.style.width = "100%";
 
-      // Set up message listener FIRST
+      // Set up message listener using SDK method
       preview.onMessage((msg: any) => {
         console.log("🎯 PARENT: Message received from Pong game:", msg);
         
@@ -60,19 +60,35 @@ export function PreviewComponent({ session }: { session: SandboxClient }) {
       preview.onStatusChange((status: string) => {
         console.log("🔌 Preview status changed:", status);
         if (status === "CONNECTED") {
-          console.log("🚀 Preview connected, injecting Pong protocol...");
+          console.log("🚀 Preview connected, setting up protocol...");
           
-          // Inject the preview protocol setup function
-          preview.injectAndInvoke(function setupProtocol({ previewProtocol }: any) {
-            // This code runs in the iframe context as plain JavaScript
-            console.log("📡 IFRAME: Pong protocol injected, setting up listeners...");
+          // Use SDK injection properly - just set up the communication protocol
+          preview.injectAndInvoke(function setupPongProtocol({ previewProtocol }: any) {
+            console.log("📡 IFRAME: Setting up Pong communication protocol...");
             
-            // Connect to the game's protocol setup
-            if (window.setupPreviewProtocol) {
-              window.setupPreviewProtocol(previewProtocol);
+            // Set up the Pong game to send messages back to parent
+            if (window.setupPongCommunication) {
+              window.setupPongCommunication(previewProtocol);
+              console.log("✅ IFRAME: Pong communication protocol established");
+            } else {
+              console.log("⏳ IFRAME: Waiting for Pong game to load...");
+              // Poll for the setup function
+              let attempts = 0;
+              const maxAttempts = 10;
+              
+              function pollForPong() {
+                attempts++;
+                if (window.setupPongCommunication) {
+                  window.setupPongCommunication(previewProtocol);
+                  console.log("✅ IFRAME: Pong communication protocol established after", attempts, "attempts");
+                } else if (attempts < maxAttempts) {
+                  setTimeout(pollForPong, 500);
+                } else {
+                  console.error("❌ IFRAME: Failed to establish Pong communication");
+                }
+              }
+              pollForPong();
             }
-            
-            console.log('✅ IFRAME: Pong protocol setup complete');
           }, {});
           
           setPreviewReady(true);
@@ -87,18 +103,18 @@ export function PreviewComponent({ session }: { session: SandboxClient }) {
 
   const startGame = () => {
     if (previewRef.current && previewReady && !gameActive) {
-      const startMessage = { type: "start" as const };
-      console.log("🎮 Starting Pong game:", startMessage);
-      previewRef.current.sendMessage(startMessage);
+      console.log("🎮 Starting Pong game using SDK sendMessage...");
+      // Use proper SDK method to send message to preview
+      previewRef.current.sendMessage({ type: "start" });
       setGameActive(true);
     }
   };
 
   const stopGame = () => {
     if (previewRef.current && previewReady && gameActive) {
-      const stopMessage = { type: "stop" as const };
-      console.log("🛑 Stopping Pong game:", stopMessage);
-      previewRef.current.sendMessage(stopMessage);
+      console.log("🛑 Stopping Pong game using SDK sendMessage...");
+      // Use proper SDK method to send message to preview
+      previewRef.current.sendMessage({ type: "stop" });
       setGameActive(false);
     }
   };
@@ -114,7 +130,7 @@ export function PreviewComponent({ session }: { session: SandboxClient }) {
             <div>
               <h3 className="font-semibold text-blue-900 mb-1">How This Preview Works</h3>
               <p className="text-blue-800 text-sm">
-                This preview displays content served by the <strong>"dev" task</strong> above, which runs a Python web server on port 3000. 
+                This preview displays content served by the <strong>"dev" task</strong> above, which runs a Node.js web server on port 3000. 
                 The server automatically starts when you create a sandbox and serves our retro Pong game. 
                 Use the controls below to start the game and watch the real-time ping/pong messages!
               </p>
