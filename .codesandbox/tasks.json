@@ -1,57 +1,70 @@
 {
-  // These tasks will run in order when initializing your CodeSandbox project.
-  "setupTasks": [
-    {
-      "command": "npm install",
-      "name": "Installing Dependencies"
-    },
-    {
-      "command": "npm list --depth=0",
-      "name": "Verifying Installation"
-    }
-  ],
-
   // These tasks can be run from CodeSandbox. Running one will open a log in the app.
   "tasks": {
     "install": {
-      "name": "install",
-      "command": "npm install && echo 'Dependencies installed successfully!'"
+      "name": "Install Dependencies",
+      "command": "npm install && echo 'Dependencies installed successfully!'",
+      "runAtStart": true
     },
     "dev": {
-      "name": "dev",
-      "command": "npm run dev"
+      "name": "Development Server",
+      "command": "npm run dev",
+      "runAtStart": false,
+      "restartOn": {
+        "files": ["package.json", "vite.config.ts"],
+        "clone": false,
+        "resume": false
+      }
     },
     "build": {
-      "name": "build",
-      "command": "npm run build"
+      "name": "Production Build",
+      "command": "npm run build",
+      "runAtStart": false
     },
     "server": {
-      "name": "server",
-      "command": "npm run server"
+      "name": "Backend Server",
+      "command": "npm run server",
+      "runAtStart": false,
+      "restartOn": {
+        "files": ["server.ts", ".env"],
+        "clone": false,
+        "resume": false
+      }
     },
     "lint": {
-      "name": "lint",
-      "command": "npm run lint"
+      "name": "Lint Code",
+      "command": "npm run lint",
+      "runAtStart": false
     },
     "preview": {
-      "name": "preview",
-      "command": "npm run preview"
+      "name": "Preview Build",
+      "command": "npm run preview",
+      "runAtStart": false
     },
     "success-demo": {
-      "name": "success-demo",
-      "command": "npm audit --audit-level=high"
+      "name": "Success Demo",
+      "command": "npm audit --audit-level=high",
+      "runAtStart": false
     },
     "fail-demo": {
-      "name": "fail-demo", 
-      "command": "npm run nonexistent-script"
+      "name": "Failure Demo", 
+      "command": "npm run nonexistent-script",
+      "runAtStart": false
     },
     "long-demo": {
-      "name": "long-demo",
-      "command": "npm install --verbose"
+      "name": "Long Running Demo",
+      "command": "npm install --verbose",
+      "runAtStart": false
     },
     "quick-test": {
-      "name": "quick-test",
-      "command": "node --version && npm --version"
+      "name": "Quick Test",
+      "command": "node --version && npm --version",
+      "runAtStart": false
+    },
+    "port-demo": {
+      "name": "Port Listening Demo",
+      "command": "node -e \"const http = require('http'); const server = http.createServer((req, res) => { res.writeHead(200, {'Content-Type': 'text/plain'}); res.end('Hello from port demo!'); }); server.listen(3001, () => console.log('Server running on port 3001'));\"",
+      "runAtStart": false
     }
   }
 }

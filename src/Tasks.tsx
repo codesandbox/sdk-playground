@@ -16,7 +16,6 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
   const [availableTasks, setAvailableTasks] = useState<string[]>([]);
   const [taskStates, setTaskStates] = useState<{ [key: string]: TaskState }>({});
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
-  const [installComplete, setInstallComplete] = useState(false);
   
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xterm = useXTerm(terminalContainerRef);
@@ -32,7 +31,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
   };
 
   const isDemoTask = (taskName: string) => {
-    return ['success-demo', 'fail-demo', 'long-demo', 'quick-test'].includes(taskName);
+    return ['success-demo', 'fail-demo', 'long-demo', 'quick-test', 'port-demo'].includes(taskName);
   };
 
   useEffect(() => {
@@ -41,50 +40,23 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     console.log("🔍 Available methods:", Object.getOwnPropertyNames(session.tasks));
     console.log("🔍 Prototype methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(session.tasks)));
     
-    // Try different API methods to find tasks
+    // Use official SDK method to get all tasks
     let allTasks: any[] = [];
     
-    // Extended list of possible task names (from tasks.json + common ones)
-    const possibleTaskNames = [
-      // Standard npm tasks
-      "dev", "build", "server", "lint", "preview", "start", "test",
-      // Our custom demo tasks
-      "success-demo", "fail-demo", "long-demo", "quick-test",
-      // Other common tasks
-      "install", "setup", "deploy", "watch", "clean"
-    ];
-    
-    // Method 1: Try getAll() first (most comprehensive)
-    if (typeof (session.tasks as any).getAll === 'function') {
-      try {
-        allTasks = (session.tasks as any).getAll() || [];
-        console.log("✅ Found tasks via getAll():", allTasks);
-      } catch (error) {
-        console.log("❌ Error with getAll():", error);
-      }
-    }
-    
-    // Method 2: If no tasks found, try individual getTask calls
-    if (allTasks.length === 0 && typeof (session.tasks as any).getTask === 'function') {
-      console.log("✅ Found getTask method, trying individual tasks...");
-      possibleTaskNames.forEach(name => {
-        try {
-          const task = (session.tasks as any).getTask(name);
-          if (task) {
-            console.log(`✅ Found task "${name}":`, task);
-            allTasks.push(task);
-          } else {
-            console.log(`❌ Task "${name}" returned null/undefined`);
-          }
-        } catch (error) {
-          console.log(`❌ Error getting task "${name}":`, error);
-        }
-      });
-    }
-    
-    // Method 3: Try get() method
-    if (allTasks.length === 0 && typeof (session.tasks as any).get === 'function') {
-      console.log("✅ Trying get() method...");
+    try {
+      // Official SDK method as per documentation
+      allTasks = (session.tasks as any).getAll() || [];
+      console.log("✅ Found tasks via official getAll():", allTasks);
+    } catch (error) {
+      console.log("❌ Error with official getAll():", error);
+      
+      // Fallback to legacy methods if official method fails
+      const possibleTaskNames = [
+        "install", "dev", "build", "server", "lint", "preview", 
+        "success-demo", "fail-demo", "long-demo", "quick-test", "port-demo"
+      ];
+      
+      // Try individual task retrieval
       allTasks = possibleTaskNames.map(name => {
         try {
           return (session.tasks as any).get(name);
@@ -92,17 +64,8 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
           return null;
         }
       }).filter(Boolean);
+      
       console.log("✅ Found tasks via individual get():", allTasks);
-    }
-    
-    // Method 4: Check if tasks object has direct properties
-    if (allTasks.length === 0) {
-      console.log("❌ No tasks found via methods, checking for direct properties...");
-      const taskKeys = Object.keys(session.tasks).filter(key => 
-        typeof (session.tasks as any)[key] === 'object' && 
-        (session.tasks as any)[key] !== null
-      );
-      console.log("🔍 Found potential task keys:", taskKeys);
     }
 
     // Remove duplicates and log results
@@ -111,13 +74,6 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     
     // Sort tasks: install first, then dependency tasks, then demo tasks, then others
     const sortedTaskNames = foundTaskNames.sort((a, b) => {
-      const aIsInstall = isInstallTask(a);
-      const bIsInstall = isInstallTask(b);
-      const aRequiresDeps = requiresDependencies(a);
-      const bRequiresDeps = requiresDependencies(b);
-      const aIsDemo = isDemoTask(a);
-      const bIsDemo = isDemoTask(b);
-      
       // Priority order: install > dependency tasks > demo tasks > others
       const getTaskPriority = (taskName: string) => {
         if (isInstallTask(taskName)) return 1;
@@ -169,45 +125,17 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
               hasError: status === "ERROR"
             }
           }));
-          
-          // Track install completion in real-time
-          if (isInstallTask(taskName) && status === "FINISHED") {
-            console.log(`✅ Install task "${taskName}" completed successfully via status change`);
-            setInstallComplete(true);
-          }
+
         });
       }
     });
     setTaskStates(initialStates);
 
-    // Check for install completion by monitoring install task status
-    const checkInstallComplete = () => {
-      // Install is complete if we have tasks and no install task is running
-      const hasInstallTask = uniqueTasks.some((task: any) => isInstallTask(task.name));
-      if (!hasInstallTask) {
-        // If no install task exists, assume dependencies are ready
-        setInstallComplete(true);
-      } else {
-        // If install task exists, check if it has completed
-        const installTask = uniqueTasks.find((task: any) => isInstallTask(task.name));
-        if (installTask && installTask.status === "FINISHED") {
-          setInstallComplete(true);
-        }
-      }
-    };
-
-    checkInstallComplete();
   }, [session.tasks]);
 
   const runTask = async (taskName: string) => {
     const taskState = taskStates[taskName];
     if (!taskState?.task) return;
-
-    // Prevent running dependency tasks before install completes
-    if (requiresDependencies(taskName) && !installComplete) {
-      console.log(`⚠️ Task "${taskName}" requires dependencies. Run install task first...`);
-      return;
-    }
 
     // Automatically select this task for output display
     setSelectedTask(taskName);
@@ -215,27 +143,42 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     const task = taskState.task;
     
     console.log(`🚀 Starting task "${taskName}"`);
-    console.log(`📊 task.status before restart:`, task.status);
+    console.log(`📊 task.status before run:`, task.status);
 
     try {
-      // Use the proper task.restart() method from the docs
-      await task.restart();
+      // Use official SDK methods as per documentation
+      if (task.status === "RUNNING") {
+        console.log(`🔄 Task "${taskName}" is already running, restarting...`);
+        await task.restart();
+      } else {
+        console.log(`▶️ Starting task "${taskName}"...`);
+        await task.run();
+      }
       
-      console.log(`📊 task.status after restart:`, task.status);
+      console.log(`📊 task.status after run:`, task.status);
       
-      // Set up periodic status checking to demonstrate live task.status updates
-      const statusInterval = setInterval(() => {
-        console.log(`📊 Periodic check - task.status for "${taskName}":`, task.status);
-        if (task.status === "FINISHED" || task.status === "ERROR" || task.status === "KILLED") {
-          console.log(`✅ Task "${taskName}" completed with status:`, task.status);
-          clearInterval(statusInterval);
-        }
-      }, 1000);
-      
-        // Set up output listener using task.open() and task.onOutput() as documented
+      // Set up output listener using task.open() and task.onOutput() as documented
       if (typeof task.open === 'function' && typeof task.onOutput === 'function') {
+        console.log(`📺 Opening shell for task "${taskName}"`);
+        
+        // Output will not be emitted until you open the task
+        task.onOutput((output: string) => {
+          console.log(`📝 Output from "${taskName}":`, output);
+          setTaskStates(prev => ({
+            ...prev,
+            [taskName]: {
+              ...prev[taskName],
+              output: prev[taskName].output + output
+            }
+          }));
+
+          // Always write to terminal since this is the active task
+          xterm.write(output);
+        });
+        
         // Get initial output
         const initialOutput = await task.open();
+        console.log(`📋 Initial output from "${taskName}":`, initialOutput);
         
         setTaskStates(prev => ({
           ...prev,
@@ -248,38 +191,24 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
         // Always show output since we auto-selected this task
         xterm.clear();
         xterm.write(initialOutput || "");
-
-        // Listen for new output
-        task.onOutput((output: string) => {
-          setTaskStates(prev => ({
-            ...prev,
-            [taskName]: {
-              ...prev[taskName],
-              output: prev[taskName].output + output
-            }
-          }));
-
-          // Always write to terminal since this is the active task
-          xterm.write(output);
-        });
       }
       
-      // Track install completion
-      if (isInstallTask(taskName)) {
-        const installInterval = setInterval(() => {
-          if (task.status === "FINISHED") {
-            console.log(`✅ Install task "${taskName}" completed successfully`);
-            setInstallComplete(true);
-            clearInterval(installInterval);
-          } else if (task.status === "ERROR") {
-            console.log(`❌ Install task "${taskName}" failed`);
-            clearInterval(installInterval);
-          }
-        }, 1000);
+      // Special handling for port-demo task - demonstrate waitForPort
+      if (taskName === "port-demo") {
+        console.log(`🔌 Waiting for port to open for task "${taskName}"`);
+        try {
+          const port = await task.waitForPort();
+          console.log(`✅ Port opened! Preview available at: ${port.host}`);
+          xterm.write(`\r\n✅ Port opened! Preview available at: ${port.host}\r\n`);
+        } catch (error) {
+          console.log(`❌ Failed to wait for port:`, error);
+          xterm.write(`\r\n❌ Failed to wait for port: ${error}\r\n`);
+        }
       }
 
     } catch (error) {
       console.error(`Failed to run task ${taskName}:`, error);
+      xterm.write(`\r\n❌ Failed to run task: ${error}\r\n`);
     }
   };
 
@@ -288,28 +217,25 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     if (!taskState?.task) return;
 
     try {
-      // Try different stop methods based on what's available
-      if (typeof (taskState.task as any).kill === 'function') {
-        await (taskState.task as any).kill();
-      } else if (typeof (taskState.task as any).stop === 'function') {
-        await (taskState.task as any).stop();
-      }
+      // Use official SDK method as per documentation
+      console.log(`🛑 Stopping task "${taskName}"`);
+      await taskState.task.stop();
       
       setTaskStates(prev => ({
         ...prev,
         [taskName]: {
           ...prev[taskName],
-          status: "STOPPED",
+          status: "KILLED",
           isRunning: false,
           hasError: false
         }
       }));
+      
+      console.log(`✅ Task "${taskName}" stopped successfully`);
     } catch (error) {
-      console.error("Failed to stop task:", error);
+      console.error(`Failed to stop task ${taskName}:`, error);
     }
   };
-
-
 
   const getStatusColor = (status: string, hasError: boolean) => {
     // SDK task statuses: "RUNNING" | "FINISHED" | "ERROR" | "KILLED" | "RESTARTING" | "IDLE"
@@ -340,7 +266,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
   return (
     <div className="flex flex-col gap-6 w-full">
       {/* Warning for missing demo tasks */}
-      {availableTasks.length > 0 && !availableTasks.some(name => ['success-demo', 'fail-demo', 'long-demo', 'quick-test'].includes(name)) && (
+      {availableTasks.length > 0 && !availableTasks.some(name => ['success-demo', 'fail-demo', 'long-demo', 'quick-test', 'port-demo'].includes(name)) && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
             <span className="text-yellow-600 text-lg">⚠️</span>
@@ -358,54 +284,10 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
         </div>
       )}
 
-      {/* Dependency warning */}
-      {availableTasks.some(name => requiresDependencies(name)) && availableTasks.includes('install') && !installComplete && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-green-600 text-lg">🚀</span>
-            <div>
-              <p className="text-green-800 font-medium">Getting Started</p>
-              <p className="text-green-700 text-sm mt-1">
-                <strong>Step 1:</strong> Run the highlighted "install" task below to install npm dependencies.
-                <br />
-                <strong>Step 2:</strong> Once complete, other tasks will be enabled automatically.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Install completion notification */}
-      {installComplete && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-green-600 text-lg">✅</span>
-            <div>
-              <p className="text-green-800 font-medium">Dependencies Ready!</p>
-              <p className="text-green-700 text-sm mt-1">
-                All npm packages are installed. You can now run any task below.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Task Controls */}
       <div className="bg-slate-50 p-4 rounded-lg border">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-lg">Available Tasks</h3>
-          {!installComplete && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-orange-600 font-medium">⚠️ Install dependencies first</span>
-              <button
-                onClick={() => setInstallComplete(true)}
-                className="text-xs px-2 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded"
-                title="Force enable all tasks"
-              >
-                Override
-              </button>
-            </div>
-          )}
         </div>
         
         {availableTasks.length === 0 ? (
@@ -463,8 +345,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
                   {availableTasks.filter(name => requiresDependencies(name)).map((taskName) => {
                     const taskState = taskStates[taskName];
                     const isSelected = selectedTask === taskName;
-                    const isWaitingForSetup = !installComplete;
-                    const isDisabled = taskState?.isRunning || isWaitingForSetup;
+                    const isDisabled = taskState?.isRunning;
                     
                     return (
                       <button
@@ -472,9 +353,7 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
                         onClick={() => runTask(taskName)}
                         disabled={isDisabled}
                         className={`text-left p-2 rounded border transition-all ${
-                          isWaitingForSetup
-                            ? "opacity-50 cursor-not-allowed border-orange-200 bg-orange-50"
-                            : taskState?.isRunning 
+                          taskState?.isRunning 
                             ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
                             : isSelected
                             ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
@@ -492,13 +371,8 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
                           {taskState?.status || "IDLE"}
                         </div>
                         
-                        <div className={`text-xs ${isWaitingForSetup ? 'text-orange-600' : 'text-slate-500'}`}>
-                          {isWaitingForSetup
-                            ? "⏳ Run install first"
-                            : taskState?.isRunning 
-                            ? "⏸️ Running..."
-                            : "▶️ Run"
-                          }
+                        <div className="text-xs text-slate-500">
+                          {taskState?.isRunning ? "⏸️ Running..." : "▶️ Run"}
                         </div>
                       </button>
                     );
@@ -630,10 +504,16 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
 
       {/* API Usage Example */}
       <div className="bg-slate-50 p-4 rounded-lg border">
-        <h4 className="font-bold text-base mb-2">Tasks API Usage</h4>
+        <h4 className="font-bold text-base mb-2">Tasks API Usage (Official SDK)</h4>
         <pre className="text-xs bg-slate-800 text-slate-100 p-3 rounded overflow-x-auto">
-{`// Get a specific task
-const task = session.tasks.getTask("build");
+{`// Get all tasks
+const tasks = client.tasks.getAll();
+for (const task of tasks) {
+  console.log(\`Task: \${task.name} (\${task.command})\`);
+}
+
+// Get a specific task
+const task = client.tasks.get("build");
 
 if (task) {
   console.log(\`Task: \${task.name}\`);
@@ -642,16 +522,25 @@ if (task) {
   console.log(\`Status: \${task.status}\`);
   console.log(\`Runs at start: \${task.runAtStart}\`);
   
-  // Monitor status changes
-  task.onStatusChange((status) => {
-    console.log(\`Task status changed: \${status}\`);
-  });
-  
   // Control task execution
-  await task.restart(); // Restart the task
+  await task.run();     // Run the task
+  await task.restart(); // Restart if already running
   await task.stop();    // Stop the task
+  
+  // Open shell and listen for output
+  task.onOutput((output) => {
+    console.log(output);
+  });
+  const output = await task.open();
+  
+  // Wait for port to open (if task opens a port)
+  const port = await task.waitForPort();
+  console.log(\`Preview available at: \${port.host}\`);
 }`}
         </pre>
+        <div className="mt-3 text-xs text-slate-600">
+          <strong>📚 Reference:</strong> <a href="https://codesandbox.io/docs/sdk/tasks" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">CodeSandbox SDK Tasks Documentation</a>
+        </div>
       </div>
     </div>
   );
