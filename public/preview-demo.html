@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview Protocol Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .status {
+            text-align: center;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #4CAF50;
+            padding-left: 10px;
+        }
+        .log-entry.received {
+            border-left-color: #2196F3;
+        }
+        .log-entry.sent {
+            border-left-color: #FF9800;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Preview Protocol Demo</h1>
+        
+        <div class="status" id="status">
+            Initializing preview protocol...
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <p>This page demonstrates the CodeSandbox Preview API communication.</p>
+            <p>Click "Send ping" in the parent window to see the protocol in action!</p>
+        </div>
+        
+        <div class="log" id="log">
+            <div class="log-entry">📡 Preview protocol demo ready</div>
+        </div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+        
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        // Initialize the preview protocol
+        if (window.parent !== window) {
+            statusEl.textContent = '✅ Running in preview iframe - ready for communication!';
+            log('📡 Preview iframe initialized');
+            log('🔌 Waiting for preview protocol injection...');
+        } else {
+            statusEl.textContent = '⚠️ Not running in iframe - open via Preview API';
+            log('⚠️ Not in iframe context');
+        }
+        
+        // Listen for messages from parent window
+        window.addEventListener('message', (event) => {
+            log(`📨 Received message: ${JSON.stringify(event.data)}`, 'received');
+        });
+        
+        // Global function to be called by injectAndInvoke
+        window.setupPreviewProtocol = function(previewProtocol) {
+            log('🚀 Preview protocol injected and ready!');
+            statusEl.textContent = '🚀 Preview protocol active - send a ping!';
+            
+            // Listen for ping messages
+            previewProtocol.addListener('ping', (data) => {
+                log(`🔔 Received ping: ${JSON.stringify(data)}`, 'received');
+                
+                // Respond with pong
+                const pongMessage = { type: 'pong', timestamp: Date.now(), original: data };
+                previewProtocol.sendMessage(pongMessage);
+                log(`📤 Sent pong: ${JSON.stringify(pongMessage)}`, 'sent');
+            });
+            
+            // Send a welcome message
+            const welcomeMessage = { type: 'welcome', message: 'Preview protocol is ready!' };
+            previewProtocol.sendMessage(welcomeMessage);
+            log(`📤 Sent welcome: ${JSON.stringify(welcomeMessage)}`, 'sent');
+        };
+        
+        log('✅ Preview demo page loaded');
+    </script>
+</body>
+</html> 

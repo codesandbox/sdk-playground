@@ -47,14 +47,18 @@ function App() {
           const sessionData = await fetch(`/api/sandboxes/${storedId}`).then(
             (res) => res.json()
           );
-          const client = await connectToSandbox(sessionData.session);
+          const client = await connectToSandbox({
+            session: sessionData.session,
+            getSession: (id) => fetch(`/api/sandboxes/${id}`).then(res => res.json()).then(data => data.session)
+          });
           setState({
             current: "CONNECTED",
             sandboxId: storedId,
             session: client,
             selectedExample: null,
           });
-        } catch {
+        } catch (error) {
+          console.error("Failed to connect to sandbox:", error);
           localStorage.removeItem("sandboxId"); // Remove if invalid
           setState({ current: "IDLE" });
         }
@@ -77,15 +81,27 @@ function App() {
         sandboxId: sessionData.id,
         progress: "Connecting to sandbox...",
       });
-      const client = await connectToSandbox(sessionData.session);
+      const client = await connectToSandbox({
+        session: sessionData.session,
+        getSession: (id) => fetch(`/api/sandboxes/${id}`).then(res => res.json()).then(data => data.session),
+        initStatusCb(status) {
+          setState({
+            current: "CONNECTING_TO_SANDBOX",
+            sandboxId: sessionData.id,
+            progress: status.message,
+          });
+        },
+      });
       setState({
         current: "CONNECTED",
         sandboxId: sessionData.id,
         session: client,
         selectedExample: null,
       });
-    } catch {
-      alert("Failed to create sandbox");
+    } catch (error) {
+      console.error("Failed to create sandbox:", error);
+      alert(`Failed to create sandbox: ${error instanceof Error ? error.message : String(error)}`);
+      setState({ current: "IDLE" });
     }
   };
 
@@ -241,21 +257,16 @@ const sandbox = await sdk.sandboxes.create();
           <ExampleWrapper title="Tasks API Playground" sourcePath="Tasks.tsx">
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800 font-medium">
-                📋 Interactive Tasks API demonstration with success/failure examples, real-time status monitoring, and task output streaming.
+                📋 Interactive Tasks API demonstration with real development workflows, success/failure examples, and real-time status monitoring.
               </p>
               <p className="text-sm text-blue-700 mt-2">
-                💡 <strong>Start here:</strong> Run the "install" task first to install dependencies required by other examples below.
+                💡 <strong>Try it:</strong> Run tasks like "dev", "build", or demo tasks to see real command execution with live output streaming.
               </p>
             </div>
             <TasksComponent session={state.session} />
           </ExampleWrapper>
 
           <ExampleWrapper title="Command Example" sourcePath="Command.tsx">
-            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm text-amber-800 font-medium">
-                ⚠️ <strong>Requires dependencies:</strong> Run the "install" task above first if you see "command not found" errors.
-              </p>
-            </div>
             <CommandComponent session={state.session} />
           </ExampleWrapper>
 

@@ -20,138 +20,107 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xterm = useXTerm(terminalContainerRef);
 
-  // Helper functions (defined before useEffect to avoid reference errors)
+  // Helper functions
   const requiresDependencies = (taskName: string) => {
-    // Tasks that need npm dependencies to be installed first
-    return ['dev', 'build', 'lint', 'preview', 'server'].includes(taskName);
-  };
-
-  const isInstallTask = (taskName: string) => {
-    return taskName === 'install';
+    return ['dev', 'build', 'lint', 'server'].includes(taskName);
   };
 
   const isDemoTask = (taskName: string) => {
-    return ['success-demo', 'fail-demo', 'long-demo', 'quick-test', 'port-demo'].includes(taskName);
+    return ['success-demo', 'fail-demo', 'long-demo'].includes(taskName);
   };
 
   useEffect(() => {
-    console.log("🔍 Debugging Tasks API:", session.tasks);
-    console.log("🔍 Available properties:", Object.keys(session.tasks));
-    console.log("🔍 Available methods:", Object.getOwnPropertyNames(session.tasks));
-    console.log("🔍 Prototype methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(session.tasks)));
+    console.log("🔍 Loading tasks using official SDK Tasks API...");
     
-    // Use official SDK method to get all tasks
-    let allTasks: any[] = [];
-    
-    // Use the official SDK methods as per documentation
-    try {
-      // Try the official client.tasks.getAll() method first
-      if (typeof (session.tasks as any).getAll === 'function') {
-        allTasks = (session.tasks as any).getAll();
-        console.log("✅ Found tasks via session.tasks.getAll():", allTasks);
-      } else {
-        console.log("❌ session.tasks.getAll() method not available");
-        console.log("🔍 Available methods on session.tasks:", Object.getOwnPropertyNames(session.tasks));
-        console.log("🔍 session.tasks object:", session.tasks);
+    (async () => {
+      try {
+        // Use the official SDK Tasks API as documented
+        console.log("📋 Calling client.tasks.getAll()...");
+        const allTasks = await session.tasks.getAll();
+        console.log("✅ Successfully retrieved tasks:", allTasks);
         
-        // Fallback: try to find tasks by checking known task names from our config
-        const possibleTaskNames = [
-          "install", "dev", "build", "server", "lint", "preview", 
-          "success-demo", "fail-demo", "long-demo", "quick-test", "port-demo"
-        ];
-        
-        // Try session.tasks.get() for each task
-        if (typeof (session.tasks as any).get === 'function') {
-          allTasks = possibleTaskNames.map(name => {
-            try {
-              const task = (session.tasks as any).get(name);
-              if (task) {
-                console.log(`✅ Found task "${name}":`, task);
-                return task;
-              }
-              return null;
-            } catch (error) {
-              console.log(`❌ Error getting task "${name}":`, error);
-              return null;
-            }
-          }).filter(Boolean);
-          console.log("✅ Found tasks via individual session.tasks.get():", allTasks);
-        } else {
-          console.log("❌ session.tasks.get() method also not available");
+        if (allTasks.length === 0) {
+          console.log("⚠️  No tasks found. Make sure .codesandbox/tasks.json exists with task definitions.");
+          setAvailableTasks([]);
+          return;
         }
-      }
-    } catch (error) {
-      console.error("❌ Error accessing tasks:", error);
-    }
 
-    // Remove duplicates and log results
-    const uniqueTasks = Array.from(new Map(allTasks.map(task => [task.name, task])).values());
-    const foundTaskNames = uniqueTasks.map((task: any) => task.name || 'unnamed');
-    
-    // Sort tasks: install first, then dependency tasks, then demo tasks, then others
-    const sortedTaskNames = foundTaskNames.sort((a, b) => {
-      // Priority order: install > dependency tasks > demo tasks > others
-      const getTaskPriority = (taskName: string) => {
-        if (isInstallTask(taskName)) return 1;
-        if (requiresDependencies(taskName)) return 2;
-        if (isDemoTask(taskName)) return 3;
-        return 4;
-      };
-      
-      const aPriority = getTaskPriority(a);
-      const bPriority = getTaskPriority(b);
-      
-      if (aPriority !== bPriority) {
-        return aPriority - bPriority;
-      }
-      
-      // Within same priority, sort alphabetically
-      return a.localeCompare(b);
-    });
-    
-    console.log("📋 Final sorted task names:", sortedTaskNames);
-    setAvailableTasks(sortedTaskNames);
-
-    // Initialize task states
-    const initialStates: { [key: string]: TaskState } = {};
-    uniqueTasks.forEach((task: any) => {
-      const taskName = task.name || 'unnamed';
-      console.log(`🎯 Setting up task: ${taskName}`, task);
-      console.log(`📊 Initial task.status for "${taskName}":`, task.status);
-      
-      initialStates[taskName] = {
-        task: task,
-        status: task.status || "IDLE",
-        isRunning: task.status === "RUNNING" || task.status === "RESTARTING",
-        hasError: task.status === "ERROR",
-        output: ""
-      };
-
-      // Set up status change listeners for each task
-      if (typeof task.onStatusChange === 'function') {
-        task.onStatusChange((status: string) => {
-          console.log(`🔄 Task ${taskName} status changed:`, status);
-          console.log(`📊 Live task.status for "${taskName}":`, task.status);
-          setTaskStates(prev => ({
-            ...prev,
-            [taskName]: {
-              ...prev[taskName],
-              status,
-              isRunning: status === "RUNNING" || status === "RESTARTING",
-              hasError: status === "ERROR"
-            }
-          }));
-
+        // Extract task names and sort them
+        const foundTaskNames = allTasks.map((task: Task) => task.id);
+        console.log("📝 Found task names:", foundTaskNames);
+        
+        // Sort tasks: demo tasks first, then dependency tasks, then others
+        const sortedTaskNames = foundTaskNames.sort((a, b) => {
+          const getTaskPriority = (taskName: string) => {
+            if (isDemoTask(taskName)) return 1;
+            if (requiresDependencies(taskName)) return 2;
+            return 3;
+          };
+          
+          const aPriority = getTaskPriority(a);
+          const bPriority = getTaskPriority(b);
+          
+          if (aPriority !== bPriority) {
+            return aPriority - bPriority;
+          }
+          
+          return a.localeCompare(b);
         });
-      }
-    });
-    setTaskStates(initialStates);
+        
+        console.log("📋 Final sorted task names:", sortedTaskNames);
+        setAvailableTasks(sortedTaskNames);
 
-  }, [session.tasks]);
+        // Initialize task states
+        const initialStates: { [key: string]: TaskState } = {};
+        allTasks.forEach((task: Task) => {
+          console.log(`🎯 Setting up task: ${task.id}`, {
+            name: task.name,
+            command: task.command,
+            status: task.status,
+            runAtStart: task.runAtStart
+          });
+          
+          initialStates[task.id] = {
+            task: task,
+            status: task.status,
+            isRunning: task.status === "RUNNING" || task.status === "RESTARTING",
+            hasError: task.status === "ERROR",
+            output: ""
+          };
+
+          // Set up status change listeners for each task
+          if (typeof task.onStatusChange === 'function') {
+            task.onStatusChange((status: string) => {
+              console.log(`🔄 Task ${task.id} status changed:`, status);
+              setTaskStates(prev => ({
+                ...prev,
+                [task.id]: {
+                  ...prev[task.id],
+                  status,
+                  isRunning: status === "RUNNING" || status === "RESTARTING",
+                  hasError: status === "ERROR"
+                }
+              }));
+            });
+          }
+        });
+        
+        setTaskStates(initialStates);
+        
+      } catch (error) {
+        console.error("❌ Error loading tasks:", error);
+        setAvailableTasks([]);
+      }
+    })();
+
+  }, [session]);
 
   const runTask = async (taskName: string) => {
     const taskState = taskStates[taskName];
-    if (!taskState?.task) return;
+    if (!taskState?.task) {
+      console.error(`Task "${taskName}" not found in taskStates`);
+      return;
+    }
 
     // Automatically select this task for output display
     setSelectedTask(taskName);
@@ -159,7 +128,7 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
     const task = taskState.task;
     
     console.log(`🚀 Starting task "${taskName}"`);
-    console.log(`📊 task.status before run:`, task.status);
+    console.log(`📊 Current task status:`, task.status);
 
     try {
       // Use official SDK methods as per documentation
@@ -171,13 +140,13 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
         await task.run();
       }
       
-      console.log(`📊 task.status after run:`, task.status);
+      console.log(`📊 Task status after run:`, task.status);
       
-      // Set up output listener using task.open() and task.onOutput() as documented
-      if (typeof task.open === 'function' && typeof task.onOutput === 'function') {
-        console.log(`📺 Opening shell for task "${taskName}"`);
+      // Set up output listener using task.onOutput() and task.open() as documented
+      if (typeof task.onOutput === 'function' && typeof task.open === 'function') {
+        console.log(`📺 Setting up output listener for task "${taskName}"`);
         
-        // Output will not be emitted until you open the task
+        // Set up output listener first
         task.onOutput((output: string) => {
           console.log(`📝 Output from "${taskName}":`, output);
           setTaskStates(prev => ({
@@ -188,11 +157,11 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
             }
           }));
 
-          // Always write to terminal since this is the active task
+          // Write to terminal
           xterm.write(output);
         });
         
-        // Get initial output
+        // Open the task to get initial output and start streaming
         const initialOutput = await task.open();
         console.log(`📋 Initial output from "${taskName}":`, initialOutput);
         
@@ -204,13 +173,15 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
           }
         }));
 
-        // Always show output since we auto-selected this task
+        // Clear terminal and show output
         xterm.clear();
-        xterm.write(initialOutput || "");
+        if (initialOutput) {
+          xterm.write(initialOutput);
+        }
       }
       
-      // Special handling for port-demo task - demonstrate waitForPort
-      if (taskName === "port-demo") {
+      // Special handling for tasks that might open ports
+      if (taskName === "server" && typeof task.waitForPort === 'function') {
         console.log(`🔌 Waiting for port to open for task "${taskName}"`);
         try {
           const port = await task.waitForPort();
@@ -234,7 +205,6 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
     if (!taskState?.task) return;
 
     try {
-      // Use official SDK method as per documentation
       console.log(`🛑 Stopping task "${taskName}"`);
       await taskState.task.stop();
       
@@ -255,7 +225,6 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
   };
 
   const getStatusColor = (status: string, hasError: boolean) => {
-    // SDK task statuses: "RUNNING" | "FINISHED" | "ERROR" | "KILLED" | "RESTARTING" | "IDLE"
     if (hasError || status === "ERROR") return "text-red-600";
     if (status === "RUNNING" || status === "RESTARTING") return "text-blue-600";
     if (status === "FINISHED") return "text-green-600";
@@ -265,7 +234,6 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
   };
 
   const getStatusIcon = (status: string, hasError: boolean) => {
-    // SDK task statuses: "RUNNING" | "FINISHED" | "ERROR" | "KILLED" | "RESTARTING" | "IDLE"
     if (hasError || status === "ERROR") return "❌";
     if (status === "RUNNING" || status === "RESTARTING") return "🔄";
     if (status === "FINISHED") return "✅";
@@ -282,123 +250,23 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      {/* Warning for missing demo tasks */}
-      {availableTasks.length > 0 && !availableTasks.some(name => ['success-demo', 'fail-demo', 'long-demo', 'quick-test', 'port-demo'].includes(name)) && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-yellow-600 text-lg">⚠️</span>
-            <div>
-              <p className="text-yellow-800 font-medium">Custom demo tasks not found</p>
-              <p className="text-yellow-700 text-sm mt-1">
-                You're connected to a sandbox that doesn't include our custom demo tasks (success-demo, fail-demo, etc.). 
-                <strong> Disconnect and create a new sandbox</strong> to see the full Tasks API demonstration.
-              </p>
-              <p className="text-yellow-600 text-xs mt-2">
-                Found tasks: {availableTasks.join(', ') || 'none'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Task Controls */}
       <div className="bg-slate-50 p-4 rounded-lg border">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-lg">Available Tasks</h3>
+          <span className="text-sm text-slate-600">
+            {availableTasks.length} task{availableTasks.length !== 1 ? 's' : ''} found
+          </span>
         </div>
         
         {availableTasks.length === 0 ? (
           <div className="text-center py-8 text-slate-500">
-            <p>No tasks found in your project's `.codesandbox/tasks.json` file.</p>
-            <p className="text-sm mt-2">Add tasks to your configuration to see them here.</p>
+            <p>No tasks found in your sandbox.</p>
+            <p className="text-sm mt-2">Tasks are defined in `.codesandbox/tasks.json`</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Install Tasks Section */}
-            {availableTasks.some(name => isInstallTask(name)) && (
-              <div>
-                <h4 className="text-sm font-medium text-green-700 mb-2">📦 Setup</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-                  {availableTasks.filter(name => isInstallTask(name)).map((taskName) => {
-                    const taskState = taskStates[taskName];
-                    const isSelected = selectedTask === taskName;
-                    const isDisabled = taskState?.isRunning;
-                    
-                    return (
-                      <button
-                        key={taskName}
-                        onClick={() => runTask(taskName)}
-                        disabled={isDisabled}
-                        className={`text-left p-2 rounded border transition-all border-green-300 bg-green-50 hover:bg-green-100 ring-2 ring-green-200 ${
-                          isSelected ? "ring-4 ring-green-400" : ""
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-xs truncate pr-1">{taskName}</span>
-                          <span className="text-sm">
-                            {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
-                          </span>
-                        </div>
-                        
-                        <div className={`text-xs font-mono mb-1 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
-                          {taskState?.status || "IDLE"}
-                        </div>
-                        
-                        <div className="text-xs text-green-600 font-medium">
-                          {taskState?.isRunning ? "⏸️ Installing..." : "📦 Install deps"}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Dependency Tasks Section */}
-            {availableTasks.some(name => requiresDependencies(name)) && (
-              <div>
-                <h4 className="text-sm font-medium text-slate-700 mb-2">🔧 Development Tasks</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-                  {availableTasks.filter(name => requiresDependencies(name)).map((taskName) => {
-                    const taskState = taskStates[taskName];
-                    const isSelected = selectedTask === taskName;
-                    const isDisabled = taskState?.isRunning;
-                    
-                    return (
-                      <button
-                        key={taskName}
-                        onClick={() => runTask(taskName)}
-                        disabled={isDisabled}
-                        className={`text-left p-2 rounded border transition-all ${
-                          taskState?.isRunning 
-                            ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
-                            : isSelected
-                            ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
-                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-xs truncate pr-1">{taskName}</span>
-                          <span className="text-sm">
-                            {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
-                          </span>
-                        </div>
-                        
-                        <div className={`text-xs font-mono mb-1 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
-                          {taskState?.status || "IDLE"}
-                        </div>
-                        
-                        <div className="text-xs text-slate-500">
-                          {taskState?.isRunning ? "⏸️ Running..." : "▶️ Run"}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Demo Tasks Section */}
+            {/* Demo Tasks */}
             {availableTasks.some(name => isDemoTask(name)) && (
               <div>
                 <h4 className="text-sm font-medium text-purple-700 mb-2">🎯 Demo Tasks</h4>
@@ -442,12 +310,56 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
               </div>
             )}
 
-            {/* Other Tasks Section */}
-            {availableTasks.some(name => !isInstallTask(name) && !requiresDependencies(name) && !isDemoTask(name)) && (
+            {/* Development Tasks */}
+            {availableTasks.some(name => requiresDependencies(name)) && (
+              <div>
+                <h4 className="text-sm font-medium text-slate-700 mb-2">🔧 Development Tasks</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
+                  {availableTasks.filter(name => requiresDependencies(name)).map((taskName) => {
+                    const taskState = taskStates[taskName];
+                    const isSelected = selectedTask === taskName;
+                    const isDisabled = taskState?.isRunning;
+                    
+                    return (
+                      <button
+                        key={taskName}
+                        onClick={() => runTask(taskName)}
+                        disabled={isDisabled}
+                        className={`text-left p-2 rounded border transition-all ${
+                          taskState?.isRunning 
+                            ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
+                            : isSelected
+                            ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-xs truncate pr-1">{taskName}</span>
+                          <span className="text-sm">
+                            {getStatusIcon(taskState?.status || "IDLE", taskState?.hasError || false)}
+                          </span>
+                        </div>
+                        
+                        <div className={`text-xs font-mono mb-1 ${getStatusColor(taskState?.status || "IDLE", taskState?.hasError || false)}`}>
+                          {taskState?.status || "IDLE"}
+                        </div>
+                        
+                        <div className="text-xs text-slate-500">
+                          {taskState?.isRunning ? "⏸️ Running..." : "▶️ Run"}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Other Tasks */}
+            {availableTasks.some(name => !requiresDependencies(name) && !isDemoTask(name)) && (
               <div>
                 <h4 className="text-sm font-medium text-slate-700 mb-2">📋 Other Tasks</h4>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-                  {availableTasks.filter(name => !isInstallTask(name) && !requiresDependencies(name) && !isDemoTask(name)).map((taskName) => {
+                  {availableTasks.filter(name => !requiresDependencies(name) && !isDemoTask(name)).map((taskName) => {
                     const taskState = taskStates[taskName];
                     const isSelected = selectedTask === taskName;
                     const isDisabled = taskState?.isRunning;
@@ -521,43 +433,32 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
 
       {/* API Usage Example */}
       <div className="bg-slate-50 p-4 rounded-lg border">
-        <h4 className="font-bold text-base mb-2">Tasks API Usage (Official SDK)</h4>
+        <h4 className="font-bold text-base mb-2">Tasks API Usage (SDK 2.0.2)</h4>
         <pre className="text-xs bg-slate-800 text-slate-100 p-3 rounded overflow-x-auto">
-{`// Get all tasks
-const tasks = client.tasks.getAll();
+{`// Get all tasks (from official documentation)
+const tasks = await client.tasks.getAll();
 for (const task of tasks) {
   console.log(\`Task: \${task.name} (\${task.command})\`);
 }
 
-// Get a specific task
-const task = client.tasks.get("build");
-
+// Get and run a specific task
+const task = client.tasks.get("dev");
 if (task) {
-  console.log(\`Task: \${task.name}\`);
-  console.log(\`Command: \${task.command}\`);
-  // "RUNNING" | "FINISHED" | "ERROR" | "KILLED" | "RESTARTING" | "IDLE"
-  console.log(\`Status: \${task.status}\`);
-  console.log(\`Runs at start: \${task.runAtStart}\`);
+  // Run the task
+  await task.run();
   
-  // Control task execution
-  await task.run();     // Run the task
-  await task.restart(); // Restart if already running
-  await task.stop();    // Stop the task
+  // Listen for output
+  task.onOutput((output) => console.log(output));
+  const initialOutput = await task.open();
   
-  // Open shell and listen for output
-  task.onOutput((output) => {
-    console.log(output);
-  });
-  const output = await task.open();
-  
-  // Wait for port to open (if task opens a port)
+  // Wait for ports (if task opens one)
   const port = await task.waitForPort();
-  console.log(\`Preview available at: \${port.host}\`);
+  console.log(\`Preview: \${port.host}\`);
+  
+  // Stop the task
+  await task.stop();
 }`}
         </pre>
-        <div className="mt-3 text-xs text-slate-600">
-          <strong>📚 Reference:</strong> <a href="https://codesandbox.io/docs/sdk/tasks" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">CodeSandbox SDK Tasks Documentation</a>
-        </div>
       </div>
     </div>
   );
