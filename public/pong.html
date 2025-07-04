@@ -82,10 +82,8 @@
             ball.dx = (Math.random() > 0.5 ? 1 : -1) * ball.speed;
             ball.dy = (Math.random() - 0.5) * ball.speed;
             
-            // Send game started message using SDK protocol
-            if (previewProtocol) {
-                previewProtocol.sendMessage({ type: 'game_started' });
-            }
+            // Send game started message using direct postMessage
+            sendToParent({ type: 'game_started' });
         }
         
         function stopGame() {
@@ -93,9 +91,14 @@
             gameActive = false;
             resetBall();
             
-            // Send game stopped message using SDK protocol
-            if (previewProtocol) {
-                previewProtocol.sendMessage({ type: 'game_stopped' });
+            // Send game stopped message using direct postMessage
+            sendToParent({ type: 'game_stopped' });
+        }
+        
+        function sendToParent(message) {
+            console.log('📤 IFRAME: Sending message to parent via postMessage:', message);
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage(message, '*');
             }
         }
         
@@ -169,9 +172,7 @@
                 ball.dy = ball.speed * Math.sin(angle);
                 
                 console.log('🏓 Left paddle hit!');
-                if (previewProtocol) {
-                    previewProtocol.sendMessage({ type: 'ping' });
-                }
+                sendToParent({ type: 'ping' });
             }
             
             if (ball.x + ball.radius >= rightPaddle.x &&
@@ -187,9 +188,7 @@
                 ball.dy = ball.speed * Math.sin(angle);
                 
                 console.log('🏓 Right paddle hit!');
-                if (previewProtocol) {
-                    previewProtocol.sendMessage({ type: 'pong' });
-                }
+                sendToParent({ type: 'pong' });
             }
             
             // Check for scoring
@@ -198,9 +197,7 @@
                 console.log('🎯 AI scores! AI:' + scores.ai + ' Player:' + scores.player);
                 if (scores.ai >= 5) {
                     gameActive = false;
-                    if (previewProtocol) {
-                        previewProtocol.sendMessage({ type: 'game_over', winner: 'ai', score: scores });
-                    }
+                    sendToParent({ type: 'game_over', winner: 'ai', score: scores });
                 } else {
                     resetBall();
                     ball.dx = ball.speed;
@@ -213,9 +210,7 @@
                 console.log('🎯 Player scores! Player:' + scores.player + ' AI:' + scores.ai);
                 if (scores.player >= 5) {
                     gameActive = false;
-                    if (previewProtocol) {
-                        previewProtocol.sendMessage({ type: 'game_over', winner: 'player', score: scores });
-                    }
+                    sendToParent({ type: 'game_over', winner: 'player', score: scores });
                 } else {
                     resetBall();
                     ball.dx = -ball.speed;
@@ -275,27 +270,38 @@
             }
         }
         
-        // SDK-compatible setup function that will be called by the injected code
-        window.setupPongCommunication = function(protocol) {
-            console.log('📡 IFRAME: Pong communication protocol received from SDK injection');
-            previewProtocol = protocol;
+        // Listen for messages from parent window using direct postMessage
+        window.addEventListener('message', function(event) {
+            console.log('📨 IFRAME: Received message from parent:', event.data);
             
-            // Listen for messages from parent using SDK protocol
-            protocol.addListener('start', function(data) {
-                console.log('🎮 IFRAME: Received start command via SDK');
-                scores = { player: 0, ai: 0 };
-                startGame();
-            });
-            
-            protocol.addListener('stop', function(data) {
-                console.log('🛑 IFRAME: Received stop command via SDK');
-                stopGame();
-            });
-            
-            console.log('✅ IFRAME: Pong communication protocol established');
-        };
+            if (event.data && typeof event.data === 'object') {
+                const message = event.data;
+                
+                // Handle start message
+                if (message.type === 'start') {
+                    console.log('🎮 IFRAME: Received start command via postMessage');
+                    scores = { player: 0, ai: 0 };
+                    startGame();
+                }
+                
+                // Handle stop message
+                if (message.type === 'stop') {
+                    console.log('🛑 IFRAME: Received stop command via postMessage');
+                    stopGame();
+                }
+            }
+        });
         
-        console.log('🎮 Pong game loaded, waiting for SDK communication setup...');
+        console.log('🎮 Pong game loaded, using direct postMessage communication...');
+        
+        // Send ready message to parent
+        setTimeout(() => {
+            sendToParent({ 
+                type: 'pong_ready', 
+                message: 'Pong game ready for direct postMessage communication',
+                timestamp: new Date().toISOString()
+            });
+        }, 1000);
         
         // Start the game loop
         gameLoop();

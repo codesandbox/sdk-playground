@@ -30,7 +30,7 @@ export function PreviewComponent({ session }: { session: SandboxClient }) {
     if (container && session) {
       // Create preview using the sandbox URL for port 3000 (dev server)
       const previewUrl = session.hosts.getUrl(3000);
-      console.log("🌐 Creating preview for Pong game at port 3000:", previewUrl);
+      console.log("Creating preview for Pong game at:", previewUrl);
 
       const preview = createPreview<
         { type: "start" } | { type: "stop" }, 
@@ -41,123 +41,74 @@ export function PreviewComponent({ session }: { session: SandboxClient }) {
       preview.iframe.style.height = "100%";
       preview.iframe.style.width = "100%";
 
-      // Set up message listener using SDK method
+      // Set up message listener
       preview.onMessage((msg: any) => {
-        console.log("🎯 PARENT: Message received from Pong game:", msg);
-        
-        // Handle injection test messages
-        if (msg.type === 'injection_test') {
-          console.log("✅ PARENT: Injection test successful:", msg.message);
-          return; // Don't add to UI
-        }
-        
-        // Handle injection error messages
-        if (msg.type === 'injection_error') {
-          console.error("❌ PARENT: Injection error:", msg.message, "after", msg.attempts, "attempts");
-          return; // Don't add to UI
-        }
+        console.log("Message received from Pong game:", msg);
         
         // Handle game_over messages to reset button state
         if (msg.type === 'game_over') {
           setGameActive(false);
         }
         
-        setMessages((prev) => {
-          const newMessages = [msg, ...prev];
-          console.log("🎯 PARENT: Updated messages array:", newMessages);
-          return newMessages;
-        });
+        setMessages((prev) => [msg, ...prev]);
       });
 
       preview.onStatusChange((status: string) => {
-        console.log("🔌 Preview status changed:", status);
+        console.log("Preview status changed:", status);
         if (status === "CONNECTED") {
-          console.log("🚀 Preview connected, setting up protocol...");
+          console.log("Preview connected, setting up Pong communication...");
           
-          // Use SDK injection properly - just set up the communication protocol
-          try {
-            console.log("🔧 PARENT: About to call injectAndInvoke...");
-            console.log("🔧 PARENT: Preview URL:", previewUrl);
-            console.log("🔧 PARENT: Preview iframe src:", preview.iframe.src);
-            
-            preview.injectAndInvoke(function setupPongProtocol({ previewProtocol }: any) {
-              console.log("📡 IFRAME: Setting up Pong communication protocol...");
-              console.log("📡 IFRAME: previewProtocol received:", !!previewProtocol);
-              console.log("📡 IFRAME: window.setupPongCommunication exists:", typeof window.setupPongCommunication);
+          // Set up Pong game communication protocol
+          preview.injectAndInvoke(function setupPongProtocol({ previewProtocol }: any) {
+            // Set up the Pong game to send messages back to parent
+            if (window.setupPongCommunication) {
+              window.setupPongCommunication(previewProtocol);
+              console.log("Pong communication protocol established");
+            } else {
+              // Poll for the setup function to be available
+              let attempts = 0;
+              const maxAttempts = 10;
               
-              // Send a test message to confirm injection is working
-              if (previewProtocol) {
-                previewProtocol.sendMessage({ 
-                  type: 'injection_test', 
-                  message: 'injectAndInvoke is working',
-                  timestamp: new Date().toISOString()
-                });
-              }
-              
-              // Set up the Pong game to send messages back to parent
-              if (window.setupPongCommunication) {
-                window.setupPongCommunication(previewProtocol);
-                console.log("✅ IFRAME: Pong communication protocol established");
-              } else {
-                console.log("⏳ IFRAME: Waiting for Pong game to load...");
-                // Poll for the setup function
-                let attempts = 0;
-                const maxAttempts = 10;
-                
-                function pollForPong() {
-                  attempts++;
-                  console.log("📡 IFRAME: Polling attempt", attempts, "for setupPongCommunication");
-                  
-                  if (window.setupPongCommunication) {
-                    window.setupPongCommunication(previewProtocol);
-                    console.log("✅ IFRAME: Pong communication protocol established after", attempts, "attempts");
-                  } else if (attempts < maxAttempts) {
-                    setTimeout(pollForPong, 500);
-                  } else {
-                    console.error("❌ IFRAME: Failed to establish Pong communication");
-                    if (previewProtocol) {
-                      previewProtocol.sendMessage({ 
-                        type: 'injection_error', 
-                        message: 'setupPongCommunication not found after polling',
-                        attempts: attempts
-                      });
-                    }
-                  }
+              function pollForPong() {
+                attempts++;
+                if (window.setupPongCommunication) {
+                  window.setupPongCommunication(previewProtocol);
+                  console.log("Pong communication protocol established after", attempts, "attempts");
+                } else if (attempts < maxAttempts) {
+                  setTimeout(pollForPong, 500);
+                } else {
+                  console.error("Failed to establish Pong communication after", attempts, "attempts");
                 }
-                pollForPong();
               }
-            }, {});
-            
-            console.log("🔧 PARENT: injectAndInvoke call completed");
-          } catch (error) {
-            console.error("❌ PARENT: Error calling injectAndInvoke:", error);
-          }
+              pollForPong();
+            }
+          }, {});
           
           setPreviewReady(true);
-          console.log("✅ Preview marked as ready");
         }
       });
 
       container.append(preview.iframe);
-      console.log("🖼️ Preview iframe appended to container");
     }
   }, [session]);
 
   const startGame = () => {
     if (previewRef.current && previewReady && !gameActive) {
-      console.log("🎮 Starting Pong game using SDK sendMessage...");
-      // Use proper SDK method to send message to preview
-      previewRef.current.sendMessage({ type: "start" });
-      setGameActive(true);
+      console.log("Starting Pong game...");
+      if (previewRef.current.iframe && previewRef.current.iframe.contentWindow) {
+        previewRef.current.iframe.contentWindow.postMessage({ type: "start" }, '*');
+        setGameActive(true);
+      }
     }
   };
 
   const stopGame = () => {
     if (previewRef.current && previewReady && gameActive) {
-      console.log("🛑 Stopping Pong game using SDK sendMessage...");
-      // Use proper SDK method to send message to preview
-      previewRef.current.sendMessage({ type: "stop" });
-      setGameActive(false);
+      console.log("Stopping Pong game...");
+      if (previewRef.current.iframe && previewRef.current.iframe.contentWindow) {
+        previewRef.current.iframe.contentWindow.postMessage({ type: "stop" }, '*');
+        setGameActive(false);
+      }
     }
   };
 
@@ -172,7 +123,7 @@ export function PreviewComponent({ session }: { session: SandboxClient }) {
             <div>
               <h3 className="font-semibold text-blue-900 mb-1">How This Preview Works</h3>
               <p className="text-blue-800 text-sm">
-                This preview displays content served by the <strong>"dev" task</strong> above, which runs a Node.js web server on port 3000. 
+                This preview displays content served by the <strong>"dev" task</strong> above, which runs a Python web server on port 3000. 
                 The server automatically starts when you create a sandbox and serves our retro Pong game. 
                 Use the controls below to start the game and watch the real-time ping/pong messages!
               </p>
