@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', monospace;
+        }
+        #gameCanvas {
+            background: #000;
+            border: 2px solid #00ff00;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="750" height="350"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let gameActive = false;
+        let previewProtocol = null;
+        
+        // Game objects
+        const ball = {
+            x: 375,
+            y: 175,
+            dx: 0,
+            dy: 0,
+            radius: 6,
+            speed: 4.5
+        };
+        
+        const leftPaddle = {
+            x: 40,
+            y: 145,
+            width: 12,
+            height: 60,
+            speed: 8
+        };
+        
+        const rightPaddle = {
+            x: 698,
+            y: 145,
+            width: 12,
+            height: 60,
+            speed: 3.2
+        };
+        
+        let mouseY = 175;
+        let scores = { player: 0, ai: 0 };
+        
+        // Mouse control
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseY = e.clientY - rect.top;
+        });
+        
+        function resetBall() {
+            ball.x = 375;
+            ball.y = 175;
+            ball.dx = 0;
+            ball.dy = 0;
+        }
+        
+        function startGame() {
+            console.log('🎮 Starting Pong game');
+            gameActive = true;
+            resetBall();
+            // Start ball moving randomly
+            ball.dx = (Math.random() > 0.5 ? 1 : -1) * ball.speed;
+            ball.dy = (Math.random() - 0.5) * ball.speed;
+        }
+        
+        function stopGame() {
+            console.log('🛑 Stopping Pong game');
+            gameActive = false;
+            resetBall();
+        }
+        
+        function gameLoop() {
+            if (!gameActive) {
+                draw();
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+            
+            // Move ball
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+            
+            // Ball collision with top/bottom walls
+            if (ball.y <= ball.radius || ball.y >= canvas.height - ball.radius) {
+                ball.dy = -ball.dy;
+            }
+            
+            // Player paddle movement (mouse control)
+            leftPaddle.y = mouseY - leftPaddle.height / 2;
+            if (leftPaddle.y < 0) leftPaddle.y = 0;
+            if (leftPaddle.y > canvas.height - leftPaddle.height) {
+                leftPaddle.y = canvas.height - leftPaddle.height;
+            }
+            
+            // AI paddle movement (much more human-like)
+            const paddleCenter = rightPaddle.y + rightPaddle.height / 2;
+            const targetY = ball.y;
+            const deadZone = 40; // Dead zone adjusted for smaller paddles
+            
+            // Only move if ball is coming towards AI side and close enough
+            if (ball.dx > 0 && ball.x > canvas.width * 0.65) {
+                // Add more imperfection - AI doesn't always react perfectly
+                if (Math.random() < 0.88) { // 12% chance AI doesn't react this frame
+                    if (paddleCenter < targetY - deadZone) {
+                        rightPaddle.y += rightPaddle.speed;
+                    } else if (paddleCenter > targetY + deadZone) {
+                        rightPaddle.y -= rightPaddle.speed;
+                    }
+                }
+            } else if (ball.dx < 0) {
+                // When ball is going away, AI stays mostly where it is (more human-like)
+                // Only very slowly drift toward center if way off
+                const centerY = canvas.height / 2 - rightPaddle.height / 2;
+                const distanceFromCenter = Math.abs(paddleCenter - canvas.height / 2);
+                
+                // Only move toward center if very far off and very slowly
+                if (distanceFromCenter > 60) {
+                    if (Math.random() < 0.3) { // Only move 30% of the time
+                        if (rightPaddle.y < centerY) {
+                            rightPaddle.y += rightPaddle.speed * 0.2;
+                        } else if (rightPaddle.y > centerY) {
+                            rightPaddle.y -= rightPaddle.speed * 0.2;
+                        }
+                    }
+                }
+            }
+            
+            // Ball collision with paddles (fixed hitbox to match visual paddle)
+            if (ball.x - ball.radius <= leftPaddle.x + leftPaddle.width &&
+                ball.y + ball.radius >= leftPaddle.y &&
+                ball.y - ball.radius <= leftPaddle.y + leftPaddle.height &&
+                ball.dx < 0) {
+                // Calculate angle based on where ball hits paddle
+                const hitPosition = (ball.y - (leftPaddle.y + leftPaddle.height / 2)) / (leftPaddle.height / 2);
+                const angle = hitPosition * Math.PI / 6; // Max 30 degree angle
+                
+                // Set velocity to maintain constant speed
+                ball.dx = ball.speed * Math.cos(angle);
+                ball.dy = ball.speed * Math.sin(angle);
+                
+                console.log('🏓 Left paddle hit!');
+                if (previewProtocol) {
+                    previewProtocol.sendMessage({ type: 'ping' });
+                }
+            }
+            
+            if (ball.x + ball.radius >= rightPaddle.x &&
+                ball.y + ball.radius >= rightPaddle.y &&
+                ball.y - ball.radius <= rightPaddle.y + rightPaddle.height &&
+                ball.dx > 0) {
+                // Calculate angle based on where ball hits paddle
+                const hitPosition = (ball.y - (rightPaddle.y + rightPaddle.height / 2)) / (rightPaddle.height / 2);
+                const angle = hitPosition * Math.PI / 6; // Max 30 degree angle
+                
+                // Set velocity to maintain constant speed
+                ball.dx = -ball.speed * Math.cos(angle);
+                ball.dy = ball.speed * Math.sin(angle);
+                
+                console.log('🏓 Right paddle hit!');
+                if (previewProtocol) {
+                    previewProtocol.sendMessage({ type: 'pong' });
+                }
+            }
+            
+            // Check for scoring
+            if (ball.x < 0) {
+                scores.ai++;
+                console.log('🎯 AI scores! AI:' + scores.ai + ' Player:' + scores.player);
+                if (scores.ai >= 5) {
+                    gameActive = false;
+                    if (previewProtocol) {
+                        previewProtocol.sendMessage({ type: 'game_over', winner: 'ai', score: scores });
+                    }
+                } else {
+                    resetBall();
+                    ball.dx = ball.speed;
+                    ball.dy = (Math.random() - 0.5) * ball.speed;
+                }
+            }
+            
+            if (ball.x > canvas.width) {
+                scores.player++;
+                console.log('🎯 Player scores! Player:' + scores.player + ' AI:' + scores.ai);
+                if (scores.player >= 5) {
+                    gameActive = false;
+                    if (previewProtocol) {
+                        previewProtocol.sendMessage({ type: 'game_over', winner: 'player', score: scores });
+                    }
+                } else {
+                    resetBall();
+                    ball.dx = -ball.speed;
+                    ball.dy = (Math.random() - 0.5) * ball.speed;
+                }
+            }
+            
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw center line
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Draw paddles in retro green
+            ctx.fillStyle = '#00ff00';
+            ctx.fillRect(leftPaddle.x, leftPaddle.y, leftPaddle.width, leftPaddle.height);
+            ctx.fillRect(rightPaddle.x, rightPaddle.y, rightPaddle.width, rightPaddle.height);
+            
+            // Draw ball in retro green
+            ctx.fillStyle = '#00ff00';
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw scores in retro green
+            ctx.fillStyle = '#00ff00';
+            ctx.font = '32px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText(scores.player, canvas.width / 2 - 60, 50);
+            ctx.fillText(scores.ai, canvas.width / 2 + 60, 50);
+            
+            // Draw game status
+            if (!gameActive) {
+                ctx.fillStyle = '#00ff00';
+                ctx.font = '24px Courier New';
+                ctx.textAlign = 'center';
+                if (scores.player === 5) {
+                    ctx.fillText('PLAYER WINS!', canvas.width / 2, canvas.height / 2);
+                } else if (scores.ai === 5) {
+                    ctx.fillText('AI WINS!', canvas.width / 2, canvas.height / 2);
+                } else {
+                    ctx.fillText('CLICK START TO PLAY', canvas.width / 2, canvas.height / 2);
+                }
+            }
+        }
+        
+        // Preview protocol setup
+        console.log('🎮 Pong game loaded, waiting for preview protocol...');
+        
+        // This will be called by the preview protocol injection
+        window.setupPreviewProtocol = function(protocol) {
+            console.log('📡 Preview protocol connected to Pong game');
+            previewProtocol = protocol;
+            
+            // Listen for messages from parent
+            protocol.addListener('start', function(data) {
+                console.log('🎮 Received start message');
+                scores = { player: 0, ai: 0 };
+                startGame();
+                // Send confirmation back to parent
+                protocol.sendMessage({ type: 'game_started' });
+            });
+            
+            protocol.addListener('stop', function(data) {
+                console.log('🛑 Received stop message');
+                stopGame();
+                // Send confirmation back to parent
+                protocol.sendMessage({ type: 'game_stopped' });
+            });
+            
+            console.log('✅ Pong game protocol ready');
+        };
+        
+        // Start the game loop
+        gameLoop();
+    </script>
+</body>
+</html> 

@@ -30,11 +30,10 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
   };
 
   useEffect(() => {
-    console.log("🔍 Loading tasks using official SDK Tasks API...");
+    console.log("🔍 Loading tasks using SDK Tasks API...");
     
     (async () => {
       try {
-        // Use the official SDK Tasks API as documented
         console.log("📋 Calling client.tasks.getAll()...");
         const allTasks = await session.tasks.getAll();
         console.log("✅ Successfully retrieved tasks:", allTasks);
@@ -115,10 +114,43 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
 
   }, [session]);
 
-  const runTask = async (taskName: string) => {
+  const selectOrRunTask = async (taskName: string) => {
     const taskState = taskStates[taskName];
     if (!taskState?.task) {
       console.error(`Task "${taskName}" not found in taskStates`);
+      return;
+    }
+
+    // If task is already running, just select it for output viewing
+    if (taskState.isRunning) {
+      console.log(`📺 Selecting running task "${taskName}" for output viewing`);
+      setSelectedTask(taskName);
+      
+      // Set up output listener if not already done
+      const task = taskState.task;
+      if (typeof task.onOutput === 'function' && typeof task.open === 'function') {
+        task.onOutput((output: string) => {
+          setTaskStates(prev => ({
+            ...prev,
+            [taskName]: {
+              ...prev[taskName],
+              output: prev[taskName].output + output
+            }
+          }));
+          xterm.write(output);
+        });
+        
+        // Get current output
+        try {
+          const currentOutput = await task.open();
+          xterm.clear();
+          if (currentOutput) {
+            xterm.write(currentOutput);
+          }
+        } catch (error) {
+          console.log("Could not get current output:", error);
+        }
+      }
       return;
     }
 
@@ -131,18 +163,12 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
     console.log(`📊 Current task status:`, task.status);
 
     try {
-      // Use official SDK methods as per documentation
-      if (task.status === "RUNNING") {
-        console.log(`🔄 Task "${taskName}" is already running, restarting...`);
-        await task.restart();
-      } else {
-        console.log(`▶️ Starting task "${taskName}"...`);
-        await task.run();
-      }
+      console.log(`▶️ Starting task "${taskName}"...`);
+      await task.run();
       
       console.log(`📊 Task status after run:`, task.status);
       
-      // Set up output listener using task.onOutput() and task.open() as documented
+      // Set up output listener for real-time streaming
       if (typeof task.onOutput === 'function' && typeof task.open === 'function') {
         console.log(`📺 Setting up output listener for task "${taskName}"`);
         
@@ -274,16 +300,14 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
                   {availableTasks.filter(name => isDemoTask(name)).map((taskName) => {
                     const taskState = taskStates[taskName];
                     const isSelected = selectedTask === taskName;
-                    const isDisabled = taskState?.isRunning;
                     
                     return (
                       <button
                         key={taskName}
-                        onClick={() => runTask(taskName)}
-                        disabled={isDisabled}
-                        className={`text-left p-2 rounded border transition-all ${
+                        onClick={() => selectOrRunTask(taskName)}
+                        className={`relative group text-left p-2 rounded border transition-all ${
                           taskState?.isRunning 
-                            ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
+                            ? "border-blue-300 bg-blue-50 hover:bg-blue-100" 
                             : isSelected
                             ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
                             : "border-purple-200 bg-purple-50 hover:border-purple-300 hover:bg-purple-100"
@@ -301,7 +325,13 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
                         </div>
                         
                         <div className="text-xs text-purple-600">
-                          {taskState?.isRunning ? "⏸️ Running..." : "▶️ Run"}
+                          {taskState?.isRunning ? "👁️ View Output" : "▶️ Run"}
+                        </div>
+                        
+                        {/* Tooltip */}
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 max-w-lg">
+                          <div className="font-mono whitespace-pre-wrap break-words">{taskState?.task?.command || 'Loading...'}</div>
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                         </div>
                       </button>
                     );
@@ -318,16 +348,14 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
                   {availableTasks.filter(name => requiresDependencies(name)).map((taskName) => {
                     const taskState = taskStates[taskName];
                     const isSelected = selectedTask === taskName;
-                    const isDisabled = taskState?.isRunning;
                     
                     return (
                       <button
                         key={taskName}
-                        onClick={() => runTask(taskName)}
-                        disabled={isDisabled}
-                        className={`text-left p-2 rounded border transition-all ${
+                        onClick={() => selectOrRunTask(taskName)}
+                        className={`relative group text-left p-2 rounded border transition-all ${
                           taskState?.isRunning 
-                            ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
+                            ? "border-blue-300 bg-blue-50 hover:bg-blue-100" 
                             : isSelected
                             ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
                             : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
@@ -345,7 +373,13 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
                         </div>
                         
                         <div className="text-xs text-slate-500">
-                          {taskState?.isRunning ? "⏸️ Running..." : "▶️ Run"}
+                          {taskState?.isRunning ? "👁️ View Output" : "▶️ Run"}
+                        </div>
+                        
+                        {/* Tooltip */}
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 max-w-lg">
+                          <div className="font-mono whitespace-pre-wrap break-words">{taskState?.task?.command || 'Loading...'}</div>
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                         </div>
                       </button>
                     );
@@ -362,16 +396,14 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
                   {availableTasks.filter(name => !requiresDependencies(name) && !isDemoTask(name)).map((taskName) => {
                     const taskState = taskStates[taskName];
                     const isSelected = selectedTask === taskName;
-                    const isDisabled = taskState?.isRunning;
                     
                     return (
                       <button
                         key={taskName}
-                        onClick={() => runTask(taskName)}
-                        disabled={isDisabled}
-                        className={`text-left p-2 rounded border transition-all ${
+                        onClick={() => selectOrRunTask(taskName)}
+                        className={`relative group text-left p-2 rounded border transition-all ${
                           taskState?.isRunning 
-                            ? "opacity-75 cursor-not-allowed border-blue-300 bg-blue-50" 
+                            ? "border-blue-300 bg-blue-50 hover:bg-blue-100" 
                             : isSelected
                             ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
                             : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
@@ -389,7 +421,13 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
                         </div>
                         
                         <div className="text-xs text-slate-500">
-                          {taskState?.isRunning ? "⏸️ Running..." : "▶️ Run"}
+                          {taskState?.isRunning ? "👁️ View Output" : "▶️ Run"}
+                        </div>
+                        
+                        {/* Tooltip */}
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50 max-w-lg">
+                          <div className="font-mono whitespace-pre-wrap break-words">{taskState?.task?.command || 'Loading...'}</div>
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
                         </div>
                       </button>
                     );
@@ -425,7 +463,8 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
         {!selectedTask && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-900 bg-opacity-90 rounded-lg mt-12">
             <p className="text-slate-300 text-center">
-              Click any task above to run it and view its output
+              Click any task above to run it and view its output.<br/>
+              Running tasks can be clicked to view their output.
             </p>
           </div>
         )}
@@ -435,7 +474,7 @@ export function TasksComponent({ session }: { session: SandboxClient }) {
       <div className="bg-slate-50 p-4 rounded-lg border">
         <h4 className="font-bold text-base mb-2">Tasks API Usage (SDK 2.0.2)</h4>
         <pre className="text-xs bg-slate-800 text-slate-100 p-3 rounded overflow-x-auto">
-{`// Get all tasks (from official documentation)
+{`// Get all tasks
 const tasks = await client.tasks.getAll();
 for (const task of tasks) {
   console.log(\`Task: \${task.name} (\${task.command})\`);
