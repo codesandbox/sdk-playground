@@ -45,6 +45,18 @@ export function PreviewComponent({ session }: { session: SandboxClient }) {
       preview.onMessage((msg: any) => {
         console.log("🎯 PARENT: Message received from Pong game:", msg);
         
+        // Handle injection test messages
+        if (msg.type === 'injection_test') {
+          console.log("✅ PARENT: Injection test successful:", msg.message);
+          return; // Don't add to UI
+        }
+        
+        // Handle injection error messages
+        if (msg.type === 'injection_error') {
+          console.error("❌ PARENT: Injection error:", msg.message, "after", msg.attempts, "attempts");
+          return; // Don't add to UI
+        }
+        
         // Handle game_over messages to reset button state
         if (msg.type === 'game_over') {
           setGameActive(false);
@@ -63,33 +75,63 @@ export function PreviewComponent({ session }: { session: SandboxClient }) {
           console.log("🚀 Preview connected, setting up protocol...");
           
           // Use SDK injection properly - just set up the communication protocol
-          preview.injectAndInvoke(function setupPongProtocol({ previewProtocol }: any) {
-            console.log("📡 IFRAME: Setting up Pong communication protocol...");
+          try {
+            console.log("🔧 PARENT: About to call injectAndInvoke...");
+            console.log("🔧 PARENT: Preview URL:", previewUrl);
+            console.log("🔧 PARENT: Preview iframe src:", preview.iframe.src);
             
-            // Set up the Pong game to send messages back to parent
-            if (window.setupPongCommunication) {
-              window.setupPongCommunication(previewProtocol);
-              console.log("✅ IFRAME: Pong communication protocol established");
-            } else {
-              console.log("⏳ IFRAME: Waiting for Pong game to load...");
-              // Poll for the setup function
-              let attempts = 0;
-              const maxAttempts = 10;
+            preview.injectAndInvoke(function setupPongProtocol({ previewProtocol }: any) {
+              console.log("📡 IFRAME: Setting up Pong communication protocol...");
+              console.log("📡 IFRAME: previewProtocol received:", !!previewProtocol);
+              console.log("📡 IFRAME: window.setupPongCommunication exists:", typeof window.setupPongCommunication);
               
-              function pollForPong() {
-                attempts++;
-                if (window.setupPongCommunication) {
-                  window.setupPongCommunication(previewProtocol);
-                  console.log("✅ IFRAME: Pong communication protocol established after", attempts, "attempts");
-                } else if (attempts < maxAttempts) {
-                  setTimeout(pollForPong, 500);
-                } else {
-                  console.error("❌ IFRAME: Failed to establish Pong communication");
-                }
+              // Send a test message to confirm injection is working
+              if (previewProtocol) {
+                previewProtocol.sendMessage({ 
+                  type: 'injection_test', 
+                  message: 'injectAndInvoke is working',
+                  timestamp: new Date().toISOString()
+                });
               }
-              pollForPong();
-            }
-          }, {});
+              
+              // Set up the Pong game to send messages back to parent
+              if (window.setupPongCommunication) {
+                window.setupPongCommunication(previewProtocol);
+                console.log("✅ IFRAME: Pong communication protocol established");
+              } else {
+                console.log("⏳ IFRAME: Waiting for Pong game to load...");
+                // Poll for the setup function
+                let attempts = 0;
+                const maxAttempts = 10;
+                
+                function pollForPong() {
+                  attempts++;
+                  console.log("📡 IFRAME: Polling attempt", attempts, "for setupPongCommunication");
+                  
+                  if (window.setupPongCommunication) {
+                    window.setupPongCommunication(previewProtocol);
+                    console.log("✅ IFRAME: Pong communication protocol established after", attempts, "attempts");
+                  } else if (attempts < maxAttempts) {
+                    setTimeout(pollForPong, 500);
+                  } else {
+                    console.error("❌ IFRAME: Failed to establish Pong communication");
+                    if (previewProtocol) {
+                      previewProtocol.sendMessage({ 
+                        type: 'injection_error', 
+                        message: 'setupPongCommunication not found after polling',
+                        attempts: attempts
+                      });
+                    }
+                  }
+                }
+                pollForPong();
+              }
+            }, {});
+            
+            console.log("🔧 PARENT: injectAndInvoke call completed");
+          } catch (error) {
+            console.error("❌ PARENT: Error calling injectAndInvoke:", error);
+          }
           
           setPreviewReady(true);
           console.log("✅ Preview marked as ready");
