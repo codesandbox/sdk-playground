@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Command, WebSocketSession } from "@codesandbox/sdk/browser";
+import { Command, SandboxClient } from "@codesandbox/sdk/browser";
 import { useXTerm } from "./useXTerm";
 import type { IDisposable } from "@xterm/xterm";
 
@@ -13,7 +13,7 @@ function hasNonZeroExitCode(obj: unknown): boolean {
   );
 }
 
-export function CommandComponent({ session }: { session: WebSocketSession }) {
+export function CommandComponent({ session }: { session: SandboxClient }) {
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xterm = useXTerm(terminalContainerRef);
   const [devCommand, setDevCommand] = useState<{
@@ -38,16 +38,19 @@ export function CommandComponent({ session }: { session: WebSocketSession }) {
   // NOTE: This is a simplified version of the previous useEffect
   //       for devCommand detection.
   useEffect(() => {
-    const devCommand = session.commands.getAll()[0];
+    (async () => {
+      const commands = await session.commands.getAll();
+      const devCommand = commands[0];
 
-    if (devCommand) {
-      setDevCommand({
-        command: devCommand,
-        disposable: devCommand.onOutput((output: string) => {
-          xterm.write(output);
-        }),
-      });
-    }
+      if (devCommand) {
+        setDevCommand({
+          command: devCommand,
+          disposable: devCommand.onOutput((output: string) => {
+            xterm.write(output);
+          }),
+        });
+      }
+    })();
   }, [session.commands, xterm]);
 
   async function runEchoCommand() {

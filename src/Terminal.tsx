@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react";
-import { Terminal, WebSocketSession } from "@codesandbox/sdk/browser";
+import { Terminal, SandboxClient } from "@codesandbox/sdk/browser";
 
 import { useXTerm } from "./useXTerm";
 
-export function TerminalComponent({ session }: { session: WebSocketSession }) {
+export function TerminalComponent({ session }: { session: SandboxClient }) {
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const xterm = useXTerm(terminalContainerRef);
   const terminalRef = useRef<Terminal | null>(null);
@@ -13,16 +13,21 @@ export function TerminalComponent({ session }: { session: WebSocketSession }) {
     if (!terminalContainer) return;
     const disposers = new Set<() => void>();
     xterm.open(terminalContainer);
-    const terminals = session.terminals.getAll();
-    const existingTerminal =
-      terminals[0] && session.terminals.get(terminals[0].id);
-    const terminalPromise = existingTerminal
-      ? Promise.resolve(existingTerminal)
-      : session.terminals.create();
-    terminalPromise.then(async (terminal) => {
+    
+    (async () => {
+      const terminals = await session.terminals.getAll();
+      const existingTerminal =
+        terminals[0] && session.terminals.get(terminals[0].id);
+      const terminalPromise = existingTerminal
+        ? Promise.resolve(existingTerminal)
+        : session.terminals.create();
+      
+      const terminal = await terminalPromise;
+      if (!terminal) return;
+      
       terminalRef.current = terminal;
 
-      terminal.onOutput((output) => {
+      terminal.onOutput((output: string) => {
         xterm.write(output);
       });
       xterm.onData((data) => {
@@ -30,7 +35,8 @@ export function TerminalComponent({ session }: { session: WebSocketSession }) {
       });
       xterm.write(await terminal.open());
       disposers.add(() => terminal.kill());
-    });
+    })();
+    
     return () => {
       disposers.forEach((dispose) => dispose());
     };

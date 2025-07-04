@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { WebSocketSession } from "@codesandbox/sdk/browser";
+import { SandboxClient } from "@codesandbox/sdk/browser";
 
 export function InterpretersComponent({
   session,
 }: {
-  session: WebSocketSession;
+  session: SandboxClient;
 }) {
   const [jsState, setJsState] = useState({
     input: "",

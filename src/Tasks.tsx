@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Task, WebSocketSession } from "@codesandbox/sdk/browser";
+import { Task, SandboxClient } from "@codesandbox/sdk/browser";
 
 import "../node_modules/@xterm/xterm/css/xterm.css";
 import { useXTerm } from "./useXTerm";
@@ -12,7 +12,7 @@ interface TaskState {
   output: string;
 }
 
-export function TasksComponent({ session }: { session: WebSocketSession }) {
+export function TasksComponent({ session }: { session: SandboxClient }) {
   const [availableTasks, setAvailableTasks] = useState<string[]>([]);
   const [taskStates, setTaskStates] = useState<{ [key: string]: TaskState }>({});
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
@@ -43,29 +43,45 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
     // Use official SDK method to get all tasks
     let allTasks: any[] = [];
     
+    // Use the official SDK methods as per documentation
     try {
-      // Official SDK method as per documentation
-      allTasks = (session.tasks as any).getAll() || [];
-      console.log("✅ Found tasks via official getAll():", allTasks);
-    } catch (error) {
-      console.log("❌ Error with official getAll():", error);
-      
-      // Fallback to legacy methods if official method fails
-      const possibleTaskNames = [
-        "install", "dev", "build", "server", "lint", "preview", 
-        "success-demo", "fail-demo", "long-demo", "quick-test", "port-demo"
-      ];
-      
-      // Try individual task retrieval
-      allTasks = possibleTaskNames.map(name => {
-        try {
-          return (session.tasks as any).get(name);
-        } catch {
-          return null;
+      // Try the official client.tasks.getAll() method first
+      if (typeof (session.tasks as any).getAll === 'function') {
+        allTasks = (session.tasks as any).getAll();
+        console.log("✅ Found tasks via session.tasks.getAll():", allTasks);
+      } else {
+        console.log("❌ session.tasks.getAll() method not available");
+        console.log("🔍 Available methods on session.tasks:", Object.getOwnPropertyNames(session.tasks));
+        console.log("🔍 session.tasks object:", session.tasks);
+        
+        // Fallback: try to find tasks by checking known task names from our config
+        const possibleTaskNames = [
+          "install", "dev", "build", "server", "lint", "preview", 
+          "success-demo", "fail-demo", "long-demo", "quick-test", "port-demo"
+        ];
+        
+        // Try session.tasks.get() for each task
+        if (typeof (session.tasks as any).get === 'function') {
+          allTasks = possibleTaskNames.map(name => {
+            try {
+              const task = (session.tasks as any).get(name);
+              if (task) {
+                console.log(`✅ Found task "${name}":`, task);
+                return task;
+              }
+              return null;
+            } catch (error) {
+              console.log(`❌ Error getting task "${name}":`, error);
+              return null;
+            }
+          }).filter(Boolean);
+          console.log("✅ Found tasks via individual session.tasks.get():", allTasks);
+        } else {
+          console.log("❌ session.tasks.get() method also not available");
         }
-      }).filter(Boolean);
-      
-      console.log("✅ Found tasks via individual get():", allTasks);
+      }
+    } catch (error) {
+      console.error("❌ Error accessing tasks:", error);
     }
 
     // Remove duplicates and log results
@@ -198,8 +214,9 @@ export function TasksComponent({ session }: { session: WebSocketSession }) {
         console.log(`🔌 Waiting for port to open for task "${taskName}"`);
         try {
           const port = await task.waitForPort();
-          console.log(`✅ Port opened! Preview available at: ${port.host}`);
-          xterm.write(`\r\n✅ Port opened! Preview available at: ${port.host}\r\n`);
+          const portUrl = session.hosts.getUrl(port.port);
+          console.log(`✅ Port opened! Preview available at: ${portUrl}`);
+          xterm.write(`\r\n✅ Port opened! Preview available at: ${portUrl}\r\n`);
         } catch (error) {
           console.log(`❌ Failed to wait for port:`, error);
           xterm.write(`\r\n❌ Failed to wait for port: ${error}\r\n`);

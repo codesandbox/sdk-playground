@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-import { connectToSandbox, WebSocketSession } from "@codesandbox/sdk/browser";
+import { connectToSandbox, SandboxClient } from "@codesandbox/sdk/browser";
 import { CommandComponent } from "./Command";
 import "../node_modules/@xterm/xterm/css/xterm.css";
 import { InterpretersComponent } from "./Interpreters";
@@ -24,7 +24,7 @@ type State =
   | {
       current: "CONNECTED";
       sandboxId: string;
-      session: WebSocketSession;
+      session: SandboxClient;
       selectedExample: number | null;
     };
 
@@ -47,22 +47,11 @@ function App() {
           const sessionData = await fetch(`/api/sandboxes/${storedId}`).then(
             (res) => res.json()
           );
-          const session = await connectToSandbox({
-            session: sessionData,
-            getSession: (id) =>
-              fetch(`/api/sandboxes/${id}`).then((res) => res.json()),
-            initStatusCb(status) {
-              setState({
-                current: "CONNECTING_TO_SANDBOX",
-                sandboxId: storedId,
-                progress: status.message,
-              });
-            },
-          });
+          const client = await connectToSandbox(sessionData.session);
           setState({
             current: "CONNECTED",
             sandboxId: storedId,
-            session,
+            session: client,
             selectedExample: null,
           });
         } catch {
@@ -88,23 +77,11 @@ function App() {
         sandboxId: sessionData.id,
         progress: "Connecting to sandbox...",
       });
-      const session = await connectToSandbox({
-        session: sessionData,
-        getSession: (id) => {
-          return fetch(`/api/sandboxes/${id}`).then((res) => res.json());
-        },
-        initStatusCb(status) {
-          setState({
-            current: "CONNECTING_TO_SANDBOX",
-            sandboxId: sessionData.id,
-            progress: status.message,
-          });
-        },
-      });
+      const client = await connectToSandbox(sessionData.session);
       setState({
         current: "CONNECTED",
         sandboxId: sessionData.id,
-        session,
+        session: client,
         selectedExample: null,
       });
     } catch {

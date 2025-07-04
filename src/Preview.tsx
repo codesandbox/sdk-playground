@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import {
-  WebSocketSession,
+  SandboxClient,
   createPreview,
   Preview,
 } from "@codesandbox/sdk/browser";
@@ -9,42 +9,45 @@ import "../node_modules/@xterm/xterm/css/xterm.css";
 
 import { useState } from "react";
 
-export function PreviewComponent({ session }: { session: WebSocketSession }) {
+export function PreviewComponent({ session }: { session: SandboxClient }) {
   const previewContainerRef = useRef<HTMLDivElement>(null);
   // const terminalRef = useTerminal(session, terminalContainerRef);
   const previewRef = useRef<Preview<{ type: "ping" }, { type: "pong" }>>(null);
   const [messages, setMessages] = useState<unknown[]>([]);
 
   useEffect(() => {
-    if (previewContainerRef.current) {
-      const port = session.ports.get(5173);
+    const container = previewContainerRef.current;
+    if (container) {
+      (async () => {
+        const port = await session.ports.get(5173);
 
-      if (!port) {
-        return;
-      }
-
-      const preview = createPreview<{ type: "ping" }, { type: "pong" }>(
-        session.hosts.getUrl(port.port)
-      );
-
-      previewRef.current = preview;
-      preview.iframe.style.height = "100%";
-
-      preview.onStatusChange((status) => {
-        if (status === "CONNECTED") {
-          preview.injectAndInvoke(function test({ previewProtocol }) {
-            previewProtocol.addListener("ping", () => {
-              previewProtocol.sendMessage({ type: "pong" });
-            });
-          }, {});
+        if (!port) {
+          return;
         }
-      });
 
-      preview.onMessage((msg) => {
-        setMessages((prev) => [msg, ...prev]);
-      });
+        const preview = createPreview<{ type: "ping" }, { type: "pong" }>(
+          session.hosts.getUrl(port.port)
+        );
 
-      previewContainerRef.current.append(preview.iframe);
+        previewRef.current = preview;
+        preview.iframe.style.height = "100%";
+
+        preview.onStatusChange((status: string) => {
+          if (status === "CONNECTED") {
+            preview.injectAndInvoke(function test({ previewProtocol }) {
+              previewProtocol.addListener("ping", () => {
+                previewProtocol.sendMessage({ type: "pong" });
+              });
+            }, {});
+          }
+        });
+
+        preview.onMessage((msg) => {
+          setMessages((prev) => [msg, ...prev]);
+        });
+
+        container.append(preview.iframe);
+      })();
     }
   }, [session]);
 
